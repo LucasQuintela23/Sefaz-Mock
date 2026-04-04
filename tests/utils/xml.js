@@ -1,7 +1,11 @@
-function buildNfeXml({ uf = 'SP', vIBS = '10.00', vCBS = '5.00' } = {}) {
+function buildNfeXml({ uf = 'SP', cfop = '6101', dhEmi = '2026-04-01', vIBS = '10.00', vCBS = '5.00' } = {}) {
   return [
     '<NFe>',
     '  <infNFe>',
+    '    <ide>',
+    '      <CFOP>' + cfop + '</CFOP>',
+    '      <dhEmi>' + dhEmi + '</dhEmi>',
+    '    </ide>',
     '    <dest><UF>' + uf + '</UF></dest>',
     '    <imposto>',
     '      <IBSCBS>',

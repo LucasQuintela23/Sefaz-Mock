@@ -3,11 +3,17 @@
   "rules": [
     {
       "uf": "SP",
+      "cfop": "6101",
+      "vigenciaInicio": "2026-04-01",
+      "vigenciaFim": "2026-12-31",
       "vIBS": "10.00",
       "vCBS": "5.00"
     },
     {
       "uf": "RJ",
+      "cfop": "6108",
+      "vigenciaInicio": "2026-04-01",
+      "vigenciaFim": "2026-12-31",
       "vIBS": "11.50",
       "vCBS": "5.00"
     }

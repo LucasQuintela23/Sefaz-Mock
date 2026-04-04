@@ -81,6 +81,9 @@ Fluxo opcional com WireMock via Docker:
 
 - Arquivo versionado: `tests/data/ufs.v2026-04-01.json`
 - UFs cobertas no piloto: SP e RJ
+- CFOP cobertos no piloto: 6101 (SP) e 6108 (RJ)
+- Vigencia piloto: 2026-04-01 ate 2026-12-31
 - Cenarios automatizados:
-	- autorizacao com IBS/CBS aderente a regra por UF
+	- autorizacao com IBS/CBS aderente a regra por UF + CFOP + data
 	- rejeicao 422 quando IBS diverge da regra esperada
+	- rejeicao 422 quando data de emissao estiver fora da vigencia da regra
