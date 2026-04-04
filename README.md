@@ -80,10 +80,17 @@ Fluxo opcional com WireMock via Docker:
 ## Matriz fiscal piloto (Sprint B)
 
 - Arquivo versionado: `tests/data/ufs.v2026-04-01.json`
-- UFs cobertas no piloto: SP e RJ
-- CFOP cobertos no piloto: 6101 (SP) e 6108 (RJ)
-- Vigencia piloto: 2026-04-01 ate 2026-12-31
+- Matriz expandida: 27 UFs x 2 regimes tributarios (54 regras)
+- Regimes cobertos: SIMPLES_NACIONAL e LUCRO_REAL
+- CFOP utilizados: 6101, 6102 e 6108
+- Vigencia: 2026-04-01 ate 2026-12-31
 - Cenarios automatizados:
 	- autorizacao com IBS/CBS aderente a regra por UF + CFOP + data
 	- rejeicao 422 quando IBS diverge da regra esperada
 	- rejeicao 422 quando data de emissao estiver fora da vigencia da regra
+
+Geracao automatica da matriz (sem manutencao manual):
+1. Executar:
+	npm run matrix:generate
+2. Arquivo gerado:
+	tests/data/ufs.v2026-04-01.json

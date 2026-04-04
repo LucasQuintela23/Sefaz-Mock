@@ -18,8 +18,14 @@ function isDateInRange(date, start, end) {
   return date >= start && date <= end;
 }
 
-function findRule(uf, cfop, dhEmi) {
-  return ufMatrix.rules.find((rule) => rule.uf === uf && rule.cfop === cfop && isDateInRange(dhEmi, rule.vigenciaInicio, rule.vigenciaFim));
+function findRule(uf, cfop, regimeTributario, dhEmi) {
+  return ufMatrix.rules.find(
+    (rule) =>
+      rule.uf === uf &&
+      rule.cfop === cfop &&
+      rule.regimeTributario === regimeTributario &&
+      isDateInRange(dhEmi, rule.vigenciaInicio, rule.vigenciaFim)
+  );
 }
 
 const server = http.createServer((req, res) => {
@@ -43,12 +49,13 @@ const server = http.createServer((req, res) => {
   req.on('end', () => {
     const uf = extractTag(body, 'UF');
     const cfop = extractTag(body, 'CFOP');
+    const regimeTributario = extractTag(body, 'regimeTributario');
     const dhEmi = extractTag(body, 'dhEmi');
     const vIBS = extractTag(body, 'vIBS');
     const vCBS = extractTag(body, 'vCBS');
-    const rule = findRule(uf, cfop, dhEmi);
+    const rule = findRule(uf, cfop, regimeTributario, dhEmi);
 
-    if (!uf || !cfop || !dhEmi || !vIBS || !vCBS) {
+    if (!uf || !cfop || !regimeTributario || !dhEmi || !vIBS || !vCBS) {
       res.writeHead(422, { 'content-type': 'application/xml' });
       res.end('<retEnviNFe><cStat>422</cStat><xMotivo>REJEICAO_XML_INVALIDO</xMotivo></retEnviNFe>');
       return;
@@ -61,7 +68,9 @@ const server = http.createServer((req, res) => {
           uf +
           '</uf><cfop>' +
           cfop +
-          '</cfop><dhEmi>' +
+          '</cfop><regimeTributario>' +
+          regimeTributario +
+          '</regimeTributario><dhEmi>' +
           dhEmi +
           '</dhEmi></retEnviNFe>'
       );
@@ -75,7 +84,9 @@ const server = http.createServer((req, res) => {
           uf +
           '</uf><cfop>' +
           cfop +
-          '</cfop><esperadoIBS>' +
+          '</cfop><regimeTributario>' +
+          regimeTributario +
+          '</regimeTributario><esperadoIBS>' +
           rule.vIBS +
           '</esperadoIBS><informadoIBS>' +
           vIBS +
