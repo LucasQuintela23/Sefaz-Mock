@@ -22,6 +22,7 @@ jobs:
             ufs: RO,RR,SC,SP,SE,TO
     name: smoke-${{ matrix.batch.name }}
     env:
+      BATCH_NAME: ${{ matrix.batch.name }}
       TEST_UFS: ${{ matrix.batch.ufs }}
     steps:
       - name: Checkout
@@ -39,5 +40,19 @@ jobs:
       - name: Generate matrix data
         run: npm run matrix:generate
 
+      - name: Generate batch summary
+        run: npm run batch:summary
+
       - name: Run smoke tests (batch)
         run: npm run test:smoke:local
+
+      - name: Upload batch artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-${{ matrix.batch.name }}-artifacts
+          path: |
+            artifacts/
+            playwright-report/
+            test-results/
+          if-no-files-found: warn

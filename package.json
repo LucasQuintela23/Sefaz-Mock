@@ -5,6 +5,7 @@
   "description": "Framework de testes NF-e IBS/CBS com Playwright, WireMock e ambiente local",
   "scripts": {
     "matrix:generate": "node scripts/generate-uf-matrix.js",
+    "batch:summary": "node scripts/generate-batch-summary.js",
     "test": "playwright test",
     "test:headed": "playwright test --headed",
     "test:smoke": "playwright test tests/integration/nfe.smoke.spec.js",
