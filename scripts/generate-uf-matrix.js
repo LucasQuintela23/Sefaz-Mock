@@ -1,5 +1,5 @@
-const fs = require('fs');
-const path = require('path');
+const fs = require('node:fs');
+const path = require('node:path');
 
 const OUT_PATH = path.join(__dirname, '..', 'tests', 'data', 'ufs.v2026-04-01.json');
 const VIGENCIA_INICIO = '2026-04-01';
@@ -14,7 +14,7 @@ const UFS = [
 const CFOPS = ['6101', '6102', '6108'];
 
 const REGIMES = [
-  { nome: 'SIMPLES_NACIONAL', ibsDelta: 0.0, cbsDelta: 0.0 },
+  { nome: 'SIMPLES_NACIONAL', ibsDelta: 0, cbsDelta: 0 },
   { nome: 'LUCRO_REAL', ibsDelta: 0.75, cbsDelta: 0.25 }
 ];
 

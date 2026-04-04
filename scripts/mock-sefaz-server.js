@@ -1,6 +1,6 @@
-const http = require('http');
-const fs = require('fs');
-const path = require('path');
+const http = require('node:http');
+const fs = require('node:fs');
+const path = require('node:path');
 
 const port = Number(process.env.SEFAZ_MOCK_PORT || 18080);
 const matrixPath = process.env.UF_MATRIX_PATH || path.join(__dirname, '..', 'tests', 'data', 'ufs.v2026-04-01.json');
