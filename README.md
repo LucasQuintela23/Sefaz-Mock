@@ -94,3 +94,10 @@ Geracao automatica da matriz (sem manutencao manual):
 	npm run matrix:generate
 2. Arquivo gerado:
 	tests/data/ufs.v2026-04-01.json
+
+Particionamento por lote (CI/local):
+1. Definir lote de UFs via variavel:
+	TEST_UFS=SP,RJ,MG npm run test:smoke:local
+2. (Opcional) filtrar por regime:
+	TEST_UFS=SP,RJ TEST_REGIMES=SIMPLES_NACIONAL npm run test:smoke:local
+3. No GitHub Actions, os lotes sao executados em paralelo via matriz no workflow smoke.

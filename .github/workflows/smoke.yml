@@ -1,4 +1,4 @@
-name: smoke-local-wiremock
+name: smoke-local-batches
 
 on:
   push:
@@ -8,6 +8,21 @@ on:
 jobs:
   smoke:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        batch:
+          - name: lote-1
+            ufs: AC,AL,AP,AM,BA,CE,DF
+          - name: lote-2
+            ufs: ES,GO,MA,MT,MS,MG,PA
+          - name: lote-3
+            ufs: PB,PR,PE,PI,RJ,RN,RS
+          - name: lote-4
+            ufs: RO,RR,SC,SP,SE,TO
+    name: smoke-${{ matrix.batch.name }}
+    env:
+      TEST_UFS: ${{ matrix.batch.ufs }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -21,23 +36,8 @@ jobs:
       - name: Install deps
         run: npm ci
 
-      - name: Start WireMock
-        run: docker compose up -d wiremock
+      - name: Generate matrix data
+        run: npm run matrix:generate
 
-      - name: Wait WireMock
-        run: |
-          for i in {1..20}; do
-            if curl -fsS http://localhost:8080/__admin >/dev/null 2>&1; then
-              exit 0
-            fi
-            sleep 1
-          done
-          echo "WireMock not ready"
-          exit 1
-
-      - name: Run smoke tests
-        run: npm run test:smoke
-
-      - name: Stop WireMock
-        if: always()
-        run: docker compose down
+      - name: Run smoke tests (batch)
+        run: npm run test:smoke:local

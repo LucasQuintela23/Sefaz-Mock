@@ -2,8 +2,32 @@ const { test, expect } = require('@playwright/test');
 const { buildNfeXml } = require('../utils/xml');
 const ufMatrix = require('../data/ufs.v2026-04-01.json');
 
+function parseFilterList(value) {
+  if (!value) {
+    return null;
+  }
+  const items = value
+    .split(',')
+    .map((item) => item.trim().toUpperCase())
+    .filter(Boolean);
+  return items.length ? new Set(items) : null;
+}
+
+const ufFilter = parseFilterList(process.env.TEST_UFS);
+const regimeFilter = parseFilterList(process.env.TEST_REGIMES);
+
+const filteredRules = ufMatrix.rules.filter((rule) => {
+  const ufOk = !ufFilter || ufFilter.has(rule.uf.toUpperCase());
+  const regimeOk = !regimeFilter || regimeFilter.has(rule.regimeTributario.toUpperCase());
+  return ufOk && regimeOk;
+});
+
+if (!filteredRules.length) {
+  throw new Error('Nenhuma regra encontrada para os filtros informados (TEST_UFS/TEST_REGIMES).');
+}
+
 test.describe('NF-e piloto IBS/CBS', () => {
-  for (const rule of ufMatrix.rules) {
+  for (const rule of filteredRules) {
     test(
       'deve autorizar payload valido para UF ' +
         rule.uf +
