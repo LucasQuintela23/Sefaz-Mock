@@ -76,3 +76,11 @@ Fluxo opcional com WireMock via Docker:
 	npm run test:smoke
 3. Derrubar ambiente:
 	docker compose down
+
+## Matriz fiscal piloto (Sprint B)
+
+- Arquivo versionado: `tests/data/ufs.v2026-04-01.json`
+- UFs cobertas no piloto: SP e RJ
+- Cenarios automatizados:
+	- autorizacao com IBS/CBS aderente a regra por UF
+	- rejeicao 422 quando IBS diverge da regra esperada

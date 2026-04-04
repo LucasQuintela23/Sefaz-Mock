@@ -1,6 +1,19 @@
 const http = require('http');
+const fs = require('fs');
+const path = require('path');
 
 const port = Number(process.env.SEFAZ_MOCK_PORT || 18080);
+const matrixPath = process.env.UF_MATRIX_PATH || path.join(__dirname, '..', 'tests', 'data', 'ufs.v2026-04-01.json');
+const ufMatrix = JSON.parse(fs.readFileSync(matrixPath, 'utf8'));
+
+function extractTag(xml, tag) {
+  const match = xml.match(new RegExp('<' + tag + '>([^<]+)</' + tag + '>'));
+  return match ? match[1] : null;
+}
+
+function findRuleByUf(uf) {
+  return ufMatrix.rules.find((rule) => rule.uf === uf);
+}
 
 const server = http.createServer((req, res) => {
   if (req.url === '/health') {
@@ -21,9 +34,34 @@ const server = http.createServer((req, res) => {
   });
 
   req.on('end', () => {
-    if (body.includes('<vIBS>999.99</vIBS>')) {
+    const uf = extractTag(body, 'UF');
+    const vIBS = extractTag(body, 'vIBS');
+    const vCBS = extractTag(body, 'vCBS');
+    const rule = findRuleByUf(uf);
+
+    if (!uf || !vIBS || !vCBS) {
       res.writeHead(422, { 'content-type': 'application/xml' });
-      res.end('<retEnviNFe><cStat>422</cStat><xMotivo>REJEICAO_IBUT_422</xMotivo></retEnviNFe>');
+      res.end('<retEnviNFe><cStat>422</cStat><xMotivo>REJEICAO_XML_INVALIDO</xMotivo></retEnviNFe>');
+      return;
+    }
+
+    if (!rule) {
+      res.writeHead(422, { 'content-type': 'application/xml' });
+      res.end('<retEnviNFe><cStat>422</cStat><xMotivo>REJEICAO_UF_NAO_MAPEADA</xMotivo><uf>' + uf + '</uf></retEnviNFe>');
+      return;
+    }
+
+    if (vIBS !== rule.vIBS || vCBS !== rule.vCBS) {
+      res.writeHead(422, { 'content-type': 'application/xml' });
+      res.end(
+        '<retEnviNFe><cStat>422</cStat><xMotivo>REJEICAO_IBUT_422</xMotivo><uf>' +
+          uf +
+          '</uf><esperadoIBS>' +
+          rule.vIBS +
+          '</esperadoIBS><informadoIBS>' +
+          vIBS +
+          '</informadoIBS></retEnviNFe>'
+      );
       return;
     }
 
