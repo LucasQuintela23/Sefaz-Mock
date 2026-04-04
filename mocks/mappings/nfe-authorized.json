@@ -1,11 +1,9 @@
 {
   "name": "nfe-authorized",
+  "priority": 20,
   "request": {
     "method": "POST",
-    "urlPath": "/sefaz/autorizar",
-    "bodyPatterns": [
-      { "contains": "<vIBS>10.00</vIBS>" }
-    ]
+    "urlPath": "/sefaz/autorizar"
   },
   "response": {
     "status": 200,

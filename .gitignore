@@ -2,6 +2,8 @@ node_modules/
 playwright-report/
 test-results/
 artifacts/
+.docker-tmp/
+config.json
 *.tfstate
 *.tfstate.backup
 .terraform/

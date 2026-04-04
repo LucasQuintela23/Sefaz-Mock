@@ -49,7 +49,7 @@ function buildRules() {
 function main() {
   const payload = {
     version: VIGENCIA_INICIO,
-    generatedAt: new Date().toISOString(),
+    generatedAt: VIGENCIA_INICIO + 'T00:00:00.000Z',
     totalUFs: UFS.length,
     totalRules: UFS.length * REGIMES.length,
     rules: buildRules()

@@ -71,9 +71,10 @@ A governanca foi implementada em pasta dedicada:
 
 Fluxo opcional com WireMock via Docker:
 1. Subir WireMock:
-	docker compose up -d wiremock
+	npm run matrix:generate && npm run wiremock:mappings:generate
+	WIREMOCK_PORT=18080 docker compose up -d wiremock
 2. Rodar smoke:
-	npm run test:smoke
+	WIREMOCK_PORT=18080 bash scripts/smoke-local.sh
 3. Derrubar ambiente:
 	docker compose down
 
