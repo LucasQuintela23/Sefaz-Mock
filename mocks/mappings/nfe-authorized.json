@@ -1,0 +1,17 @@
+{
+  "name": "nfe-authorized",
+  "request": {
+    "method": "POST",
+    "urlPath": "/sefaz/autorizar",
+    "bodyPatterns": [
+      { "contains": "<vIBS>10.00</vIBS>" }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/xml"
+    },
+    "body": "<retEnviNFe><cStat>100</cStat><xMotivo>AUTORIZADO</xMotivo></retEnviNFe>"
+  }
+}

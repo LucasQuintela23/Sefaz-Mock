@@ -1,0 +1,10 @@
+services:
+  wiremock:
+    image: wiremock/wiremock:3.10.0
+    container_name: sefaz-wiremock
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./mocks/mappings:/home/wiremock/mappings:ro
+    command:
+      - --verbose

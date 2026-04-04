@@ -1,0 +1,43 @@
+name: smoke-local-wiremock
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Start WireMock
+        run: docker compose up -d wiremock
+
+      - name: Wait WireMock
+        run: |
+          for i in {1..20}; do
+            if curl -fsS http://localhost:8080/__admin >/dev/null 2>&1; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "WireMock not ready"
+          exit 1
+
+      - name: Run smoke tests
+        run: npm run test:smoke
+
+      - name: Stop WireMock
+        if: always()
+        run: docker compose down

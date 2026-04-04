@@ -1,0 +1,18 @@
+{
+  "name": "nfe-rejected-422",
+  "priority": 10,
+  "request": {
+    "method": "POST",
+    "urlPath": "/sefaz/autorizar",
+    "bodyPatterns": [
+      { "contains": "<vIBS>999.99</vIBS>" }
+    ]
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "Content-Type": "application/xml"
+    },
+    "body": "<retEnviNFe><cStat>422</cStat><xMotivo>REJEICAO_IBUT_422</xMotivo></retEnviNFe>"
+  }
+}
