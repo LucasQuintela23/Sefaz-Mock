@@ -1,0 +1,3 @@
+nohup: ignorando entrada
+[bootstrap] === BOOTSTRAP UP ===
+[bootstrap] ERROR: Comando 'terraform' não encontrado. Instale antes de continuar.
