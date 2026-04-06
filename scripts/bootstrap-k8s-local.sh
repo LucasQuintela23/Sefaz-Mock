@@ -4,11 +4,14 @@ set -euo pipefail
 # Script de bootstrap completo: clusters Kind + Terraform + WireMock + Playwright
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+LOG_DIR="${LOG_DIR:-$ROOT_DIR/logs}"
+ALLURE_AUTO_OPEN="${ALLURE_AUTO_OPEN:-true}"
 CLUSTER_NAME="${CLUSTER_NAME:-sefaz-mock}"
 NAMESPACE="${NAMESPACE:-sefaz-mock}"
 WIREMOCK_PORT="${WIREMOCK_PORT:-18080}"
 KUBECONFIG="${KUBECONFIG:-$HOME/.kube/config}"
 ACTION="${1:-up}"
+LOGS_PID=""
 
 log_info() {
   echo "[bootstrap] $*"
@@ -107,8 +110,15 @@ wait_for_wiremock() {
 start_port_forward() {
   log_info "Iniciando port-forward para ${WIREMOCK_PORT}:8080..."
   
-  # Mata port-forward existing se houver
-  pkill -f "kubectl.*port-forward.*${WIREMOCK_PORT}" || true
+  # Mata port-forward existente e libera a porta
+  pkill -f "kubectl.*port-forward.*${WIREMOCK_PORT}" 2>/dev/null || true
+  # Garante que a porta está liberada no SO
+  if command -v fuser >/dev/null 2>&1; then
+    fuser -k "${WIREMOCK_PORT}/tcp" 2>/dev/null || true
+  elif command -v lsof >/dev/null 2>&1; then
+    local port_pid
+    port_pid=$(lsof -ti tcp:"${WIREMOCK_PORT}" 2>/dev/null) && kill "$port_pid" 2>/dev/null || true
+  fi
   sleep 1
   
   kubectl -n "${NAMESPACE}" port-forward svc/wiremock "${WIREMOCK_PORT}:8080" &
@@ -137,8 +147,13 @@ run_tests() {
   export SEFAZ_API_URL="http://127.0.0.1:${WIREMOCK_PORT}"
   export TEST_UFS="${TEST_UFS:-SP,RJ}"
   export TEST_REGIMES="${TEST_REGIMES:-SIMPLES_NACIONAL}"
-  
-  npx playwright test --reporter=line
+  export ALLURE_RESULTS_DIR="${ALLURE_RESULTS_DIR:-$ROOT_DIR/allure-results}"
+
+  if [ -n "${TESTS_LOG_FILE:-}" ]; then
+    npx playwright test 2>&1 | tee "$TESTS_LOG_FILE"
+  else
+    npx playwright test
+  fi
   
   log_success "Testes concluído"
 }
@@ -159,6 +174,83 @@ show_logs() {
   log_error "Tente reinstalar o kubectl:"
   log_error "  curl -fsSL https://dl.k8s.io/release/v1.28.0/bin/linux/amd64/kubectl -o ~/.local/bin/kubectl.new && chmod +x ~/.local/bin/kubectl.new && mv -f ~/.local/bin/kubectl.new ~/.local/bin/kubectl"
   return 1
+}
+
+generate_allure_report() {
+  local allure_results_dir="$1"
+  local allure_report_dir="$2"
+  local allure_index="$allure_report_dir/index.html"
+
+  if ! command -v npx >/dev/null 2>&1; then
+    log_error "npx não encontrado. Não foi possível gerar relatório Allure."
+    return 1
+  fi
+
+  if [ ! -d "$allure_results_dir" ]; then
+    log_error "Diretório de resultados Allure não encontrado: $allure_results_dir"
+    return 1
+  fi
+
+  log_info "Gerando dashboard Allure..."
+  npx allure generate "$allure_results_dir" --clean -o "$allure_report_dir" >/dev/null
+  log_success "Dashboard Allure gerado em: $allure_report_dir"
+
+  if [ "$ALLURE_AUTO_OPEN" = "true" ] && command -v xdg-open >/dev/null 2>&1; then
+    log_info "Abrindo dashboard Allure no navegador..."
+    xdg-open "$allure_index" >/dev/null 2>&1 || true
+  fi
+}
+
+run_all() {
+  LOGS_PID=""
+  local run_id
+  run_id="$(date +%Y%m%d-%H%M%S)"
+  local run_log_dir="$LOG_DIR/$run_id"
+  local all_log_file="$run_log_dir/all.log"
+  local wiremock_log_file="$run_log_dir/wiremock.log"
+  local tests_log_file="$run_log_dir/tests.log"
+  local allure_results_dir="$run_log_dir/allure-results"
+  local allure_report_dir="$run_log_dir/allure-report"
+
+  mkdir -p "$run_log_dir"
+  log_info "Salvando logs desta execucao em: $run_log_dir"
+
+  # Captura toda saida do bootstrap all no arquivo all.log e mantém no terminal.
+  exec > >(tee -a "$all_log_file") 2>&1
+
+  check_requirements
+  create_kind_cluster
+  generate_test_data
+  apply_terraform
+  wait_for_wiremock
+  start_port_forward
+
+  log_info "Iniciando stream de logs do WireMock em background..."
+  kubectl -n "${NAMESPACE}" logs -f deploy/wiremock --tail=200 2>&1 | tee "$wiremock_log_file" &
+  LOGS_PID=$!
+
+  export TESTS_LOG_FILE="$tests_log_file"
+  export ALLURE_RESULTS_DIR="$allure_results_dir"
+
+  cleanup_all() {
+    if [ -n "${LOGS_PID}" ] && kill -0 "${LOGS_PID}" 2>/dev/null; then
+      kill "${LOGS_PID}" 2>/dev/null || true
+    fi
+  }
+  trap cleanup_all EXIT
+
+  run_tests
+  generate_allure_report "$allure_results_dir" "$allure_report_dir"
+  cleanup_all
+  trap - EXIT
+
+  log_success "Fluxo all concluido (ambiente mantido ativo)."
+  log_info "Use 'bash scripts/bootstrap-k8s-local.sh down' para destruir a infraestrutura."
+  log_info "Relatorios gerados:"
+  log_info "  - $all_log_file"
+  log_info "  - $wiremock_log_file"
+  log_info "  - $tests_log_file"
+  log_info "  - $allure_report_dir/index.html"
 }
 
 # Destrui infraestrutura
@@ -203,6 +295,10 @@ main() {
     logs)
       show_logs
       ;;
+    all)
+      log_info "=== BOOTSTRAP ALL ==="
+      run_all
+      ;;
     down)
       log_info "=== BOOTSTRAP DOWN ==="
       destroy_infrastructure
@@ -215,6 +311,7 @@ Comandos:
   up    - Cria cluster, provisiona infra e aguarda WireMock (padrão)
   test  - Executa testes Playwright contra WireMock já subido
   logs  - Exibe logs da stream do WireMock
+  all   - Executa up + logs + testes + dashboard Allure em um unico comando
   down  - Destrui infraestrutura (keep cluster Kind)
 
 Exemplo ponta a ponta:

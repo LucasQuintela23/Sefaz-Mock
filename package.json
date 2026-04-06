@@ -15,9 +15,15 @@
     "k8s:up": "bash scripts/bootstrap-k8s-local.sh up",
     "k8s:down": "bash scripts/bootstrap-k8s-local.sh down",
     "k8s:logs": "bash scripts/bootstrap-k8s-local.sh logs",
+    "k8s:all": "bash scripts/bootstrap-k8s-local.sh all",
+    "allure:generate": "allure generate allure-results --clean -o allure-report",
+    "allure:open": "allure open allure-report",
+    "allure:serve": "allure serve allure-results",
     "report": "playwright show-report"
   },
   "devDependencies": {
-    "@playwright/test": "^1.55.0"
+    "@playwright/test": "^1.55.0",
+    "allure-commandline": "^2.38.1",
+    "allure-playwright": "^3.6.0"
   }
 }
