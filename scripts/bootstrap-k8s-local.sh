@@ -407,6 +407,80 @@ customize_allure_report_ui() {
   color: #666;
 }
 
+.copilot-duration-trend__evidence {
+  margin-top: 16px;
+  border: 1px solid #e6e6e6;
+  border-radius: 8px;
+  background: #fff;
+  padding: 12px;
+}
+
+.copilot-duration-trend__evidence-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.copilot-duration-trend__evidence-title {
+  font-size: 12px;
+  color: #555;
+  text-transform: uppercase;
+}
+
+.copilot-duration-trend__evidence-open {
+  border: 1px solid #d9d9d9;
+  border-radius: 6px;
+  background: #fafafa;
+  color: #222;
+  padding: 5px 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.copilot-duration-trend__evidence-open:hover {
+  background: #f0f0f0;
+}
+
+.copilot-duration-trend__evidence-empty {
+  color: #777;
+  font-size: 12px;
+}
+
+.copilot-duration-trend__evidence-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.copilot-duration-trend__evidence-card {
+  border: 1px solid #ececec;
+  border-radius: 7px;
+  background: #fafafa;
+  padding: 8px;
+}
+
+.copilot-duration-trend__evidence-card h4 {
+  margin: 0 0 6px;
+  font-size: 12px;
+  color: #444;
+}
+
+.copilot-duration-trend__evidence-pre {
+  margin: 0;
+  padding: 8px;
+  border-radius: 6px;
+  background: #161b22;
+  color: #e6edf3;
+  font-size: 11px;
+  line-height: 1.35;
+  max-height: 220px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .copilot-duration-trend__tooltip {
   position: absolute;
   z-index: 8;
@@ -436,6 +510,10 @@ customize_allure_report_ui() {
   .copilot-duration-trend__stats {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .copilot-duration-trend__evidence-grid {
+    grid-template-columns: 1fr;
+  }
 }
 EOF
 
@@ -447,6 +525,106 @@ EOF
 
   function formatMs(value) {
     return value >= 1000 ? (value / 1000).toFixed(2) + 's' : Math.round(value) + 'ms';
+  }
+
+  function escapeHtml(value) {
+    return String(value || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function findStepByName(step, targetName) {
+    if (!step) {
+      return null;
+    }
+
+    if (step.name === targetName) {
+      return step;
+    }
+
+    var children = Array.isArray(step.steps) ? step.steps : [];
+    for (var index = 0; index < children.length; index += 1) {
+      var nested = findStepByName(children[index], targetName);
+      if (nested) {
+        return nested;
+      }
+    }
+
+    return null;
+  }
+
+  function attachmentFromTestCase(testCase, attachmentName) {
+    var root = testCase && testCase.testStage;
+    var step = findStepByName(root, attachmentName);
+
+    if (!step || !Array.isArray(step.attachments) || !step.attachments.length) {
+      return null;
+    }
+
+    return step.attachments[0];
+  }
+
+  function fetchAttachmentSource(source) {
+    if (!source) {
+      return Promise.resolve('');
+    }
+
+    return fetch('data/attachments/' + source)
+      .then(function (response) {
+        if (!response.ok) {
+          return '';
+        }
+        return response.text();
+      })
+      .catch(function () {
+        return '';
+      });
+  }
+
+  function loadEvidence(point) {
+    if (!point || !point.uid) {
+      return Promise.resolve(null);
+    }
+
+    return fetch('data/test-cases/' + point.uid + '.json')
+      .then(function (response) {
+        if (!response.ok) {
+          return null;
+        }
+        return response.json();
+      })
+      .then(function (testCase) {
+        if (!testCase) {
+          return null;
+        }
+
+        var names = ['regra-aplicada.json', 'request-body.xml', 'response-body.xml', 'resumo-execucao.json'];
+        var attachments = names.map(function (name) {
+          return attachmentFromTestCase(testCase, name);
+        });
+
+        return Promise.all(
+          attachments.map(function (attachment) {
+            return fetchAttachmentSource(attachment && attachment.source);
+          })
+        ).then(function (contents) {
+          return {
+            uid: point.uid,
+            title: point.name,
+            duration: point.duration,
+            rule: contents[0] || '',
+            request: contents[1] || '',
+            response: contents[2] || '',
+            summary: contents[3] || ''
+          };
+        });
+      })
+      .catch(function () {
+        return null;
+      });
   }
 
   function percentile(values, fraction) {
@@ -651,6 +829,88 @@ EOF
     tooltip.className = 'copilot-duration-trend__tooltip';
     chart.appendChild(tooltip);
 
+    var evidenceCache = {};
+    var evidence = document.createElement('div');
+    evidence.className = 'copilot-duration-trend__evidence';
+    evidence.innerHTML =
+      '<div class="copilot-duration-trend__evidence-head">' +
+      '<div class="copilot-duration-trend__evidence-title">Evidencias do teste selecionado</div>' +
+      '<button class="copilot-duration-trend__evidence-open" type="button" disabled>Abrir detalhe no Allure</button>' +
+      '</div>' +
+      '<div class="copilot-duration-trend__evidence-empty">Clique em um ponto da linha para carregar regra aplicada e corpos da execucao.</div>';
+
+    var evidenceOpenButton = evidence.querySelector('.copilot-duration-trend__evidence-open');
+    var selectedPoint = null;
+
+    function renderEvidenceContent(data) {
+      if (!data) {
+        evidence.innerHTML =
+          '<div class="copilot-duration-trend__evidence-head">' +
+          '<div class="copilot-duration-trend__evidence-title">Evidencias do teste selecionado</div>' +
+          '<button class="copilot-duration-trend__evidence-open" type="button" disabled>Abrir detalhe no Allure</button>' +
+          '</div>' +
+          '<div class="copilot-duration-trend__evidence-empty">Nao foi possivel carregar as evidencias deste teste.</div>';
+        evidenceOpenButton = evidence.querySelector('.copilot-duration-trend__evidence-open');
+        return;
+      }
+
+      evidence.innerHTML =
+        '<div class="copilot-duration-trend__evidence-head">' +
+        '<div class="copilot-duration-trend__evidence-title">Evidencias: ' +
+        escapeHtml(data.title) +
+        ' (' +
+        escapeHtml(formatMs(data.duration)) +
+        ')</div>' +
+        '<button class="copilot-duration-trend__evidence-open" type="button">Abrir detalhe no Allure</button>' +
+        '</div>' +
+        '<div class="copilot-duration-trend__evidence-grid">' +
+        '<div class="copilot-duration-trend__evidence-card"><h4>Resumo</h4><pre class="copilot-duration-trend__evidence-pre">' +
+        escapeHtml(data.summary || '{}') +
+        '</pre></div>' +
+        '<div class="copilot-duration-trend__evidence-card"><h4>Regra aplicada</h4><pre class="copilot-duration-trend__evidence-pre">' +
+        escapeHtml(data.rule || '{}') +
+        '</pre></div>' +
+        '<div class="copilot-duration-trend__evidence-card"><h4>Request Body (XML)</h4><pre class="copilot-duration-trend__evidence-pre">' +
+        escapeHtml(data.request || '<vazio>') +
+        '</pre></div>' +
+        '<div class="copilot-duration-trend__evidence-card"><h4>Response Body (XML)</h4><pre class="copilot-duration-trend__evidence-pre">' +
+        escapeHtml(data.response || '<vazio>') +
+        '</pre></div>' +
+        '</div>';
+
+      evidenceOpenButton = evidence.querySelector('.copilot-duration-trend__evidence-open');
+      evidenceOpenButton.addEventListener('click', function () {
+        openTestDetails(selectedPoint);
+      });
+    }
+
+    function showEvidence(point) {
+      if (!point || !point.uid) {
+        return;
+      }
+
+      selectedPoint = point;
+
+      if (evidenceCache[point.uid]) {
+        renderEvidenceContent(evidenceCache[point.uid]);
+        return;
+      }
+
+      evidence.innerHTML =
+        '<div class="copilot-duration-trend__evidence-head">' +
+        '<div class="copilot-duration-trend__evidence-title">Evidencias do teste selecionado</div>' +
+        '<button class="copilot-duration-trend__evidence-open" type="button" disabled>Abrir detalhe no Allure</button>' +
+        '</div>' +
+        '<div class="copilot-duration-trend__evidence-empty">Carregando evidencias...</div>';
+
+      loadEvidence(point).then(function (data) {
+        if (data) {
+          evidenceCache[point.uid] = data;
+        }
+        renderEvidenceContent(data);
+      });
+    }
+
     function showTooltip(point, clientX, clientY) {
       if (!point) {
         return;
@@ -723,6 +983,11 @@ EOF
 
     svg.addEventListener('click', function (event) {
       var point = nearestPointByClientX(event.clientX);
+      showEvidence(point);
+    });
+
+    svg.addEventListener('dblclick', function (event) {
+      var point = nearestPointByClientX(event.clientX);
       openTestDetails(point);
     });
 
@@ -759,12 +1024,13 @@ EOF
 
     var hint = document.createElement('div');
     hint.className = 'copilot-duration-trend__hint';
-    hint.textContent = 'Passe o mouse para ver o teste e clique no ponto para abrir os detalhes do log no Allure.';
+    hint.textContent = 'Passe o mouse para ver o teste, clique no ponto para carregar as evidencias e use duplo clique para abrir o detalhe no Allure.';
 
     container.appendChild(stats);
     container.appendChild(chart);
     container.appendChild(topList);
     container.appendChild(hint);
+    container.appendChild(evidence);
     card.appendChild(container);
   }
 
