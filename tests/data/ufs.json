@@ -3,6 +3,20 @@
   "generatedAt": "2026-04-01T00:00:00.000Z",
   "totalUFs": 27,
   "totalRules": 54,
+  "cases": [
+    {
+      "uf": "RJ",
+      "vIBS": "11.10",
+      "vCBS": "5.10",
+      "expectedStatus": 200
+    },
+    {
+      "uf": "RJ",
+      "vIBS": "11.85",
+      "vCBS": "5.35",
+      "expectedStatus": 200
+    }
+  ],
   "rules": [
     {
       "uf": "AC",

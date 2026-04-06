@@ -8,6 +8,6 @@ Conteudo esperado:
 - Metadados de rastreabilidade da regra usada.
 
 Automacao atual:
-- Matriz principal gerada por script: `ufs.v2026-04-01.json`.
+- Arquivo unico de dados gerado por script: `ufs.json`.
 - Gerador: `scripts/generate-uf-matrix.js`.
 - Comando: `npm run matrix:generate`.

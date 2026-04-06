@@ -4,6 +4,11 @@ test-results/
 artifacts/
 .docker-tmp/
 config.json
+bootstrap.log
+.port-forward.pid
+logs/
+allure-results/
+allure-report/
 *.tfstate
 *.tfstate.backup
 .terraform/

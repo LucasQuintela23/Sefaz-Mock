@@ -4,11 +4,16 @@ set -euo pipefail
 # Script de bootstrap completo: clusters Kind + Terraform + WireMock + Playwright
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+LOG_DIR="${LOG_DIR:-$ROOT_DIR/logs}"
+ALLURE_AUTO_OPEN="${ALLURE_AUTO_OPEN:-true}"
+CHROME_CMD="${CHROME_CMD:-google-chrome}"
+ALLURE_SERVER_PORT="${ALLURE_SERVER_PORT:-5252}"
 CLUSTER_NAME="${CLUSTER_NAME:-sefaz-mock}"
 NAMESPACE="${NAMESPACE:-sefaz-mock}"
 WIREMOCK_PORT="${WIREMOCK_PORT:-18080}"
 KUBECONFIG="${KUBECONFIG:-$HOME/.kube/config}"
 ACTION="${1:-up}"
+LOGS_PID=""
 
 log_info() {
   echo "[bootstrap] $*"
@@ -74,10 +79,14 @@ generate_test_data() {
 
 # Inicializa e aplica Terraform
 apply_terraform() {
-  log_info "Inicializando Terraform..."
   cd "$ROOT_DIR/infra/terraform"
-  
-  terraform init
+
+  if [ "${FORCE_TERRAFORM_INIT:-false}" = "true" ] || [ ! -d ".terraform/providers" ]; then
+    log_info "Inicializando Terraform..."
+    terraform init
+  else
+    log_info "Terraform ja inicializado localmente. Pulando init. Use FORCE_TERRAFORM_INIT=true para forcar reinit."
+  fi
   
   log_info "Aplicando recursos Kubernetes..."
   terraform apply -auto-approve \
@@ -107,8 +116,15 @@ wait_for_wiremock() {
 start_port_forward() {
   log_info "Iniciando port-forward para ${WIREMOCK_PORT}:8080..."
   
-  # Mata port-forward existing se houver
-  pkill -f "kubectl.*port-forward.*${WIREMOCK_PORT}" || true
+  # Mata port-forward existente e libera a porta
+  pkill -f "kubectl.*port-forward.*${WIREMOCK_PORT}" 2>/dev/null || true
+  # Garante que a porta está liberada no SO
+  if command -v fuser >/dev/null 2>&1; then
+    fuser -k "${WIREMOCK_PORT}/tcp" 2>/dev/null || true
+  elif command -v lsof >/dev/null 2>&1; then
+    local port_pid
+    port_pid=$(lsof -ti tcp:"${WIREMOCK_PORT}" 2>/dev/null) && kill "$port_pid" 2>/dev/null || true
+  fi
   sleep 1
   
   kubectl -n "${NAMESPACE}" port-forward svc/wiremock "${WIREMOCK_PORT}:8080" &
@@ -135,12 +151,77 @@ run_tests() {
   cd "$ROOT_DIR"
   
   export SEFAZ_API_URL="http://127.0.0.1:${WIREMOCK_PORT}"
-  export TEST_UFS="${TEST_UFS:-SP,RJ}"
-  export TEST_REGIMES="${TEST_REGIMES:-SIMPLES_NACIONAL}"
-  
-  npx playwright test --reporter=line
+  # Sem filtros por padrão: executa todos os casos da matriz.
+  export TEST_UFS="${TEST_UFS:-}"
+  export TEST_REGIMES="${TEST_REGIMES:-}"
+
+  # Permite usar ALL como alias para "sem filtro".
+  if [ "${TEST_UFS}" = "ALL" ]; then
+    TEST_UFS=""
+  fi
+  if [ "${TEST_REGIMES}" = "ALL" ]; then
+    TEST_REGIMES=""
+  fi
+
+  if [ -n "${TEST_UFS}" ]; then
+    log_info "Filtro ativo TEST_UFS=${TEST_UFS}"
+  else
+    log_info "Filtro ativo TEST_UFS=ALL"
+  fi
+
+  if [ -n "${TEST_REGIMES}" ]; then
+    log_info "Filtro ativo TEST_REGIMES=${TEST_REGIMES}"
+  else
+    log_info "Filtro ativo TEST_REGIMES=ALL"
+  fi
+
+  export ALLURE_RESULTS_DIR="${ALLURE_RESULTS_DIR:-$ROOT_DIR/allure-results}"
+
+  if [ -n "${TESTS_LOG_FILE:-}" ]; then
+    npx playwright test 2>&1 | tee "$TESTS_LOG_FILE"
+  else
+    npx playwright test
+  fi
   
   log_success "Testes concluído"
+}
+
+prepare_allure_template() {
+  local allure_results_dir="$1"
+
+  mkdir -p "$allure_results_dir"
+
+  cat > "$allure_results_dir/categories.json" << 'EOF'
+[
+  {
+    "name": "Regra fiscal nao encontrada",
+    "matchedStatuses": ["failed"],
+    "messageRegex": ".*REJEICAO_REGRA_NAO_ENCONTRADA.*"
+  },
+  {
+    "name": "Divergencia de IBS/CBS",
+    "matchedStatuses": ["failed"],
+    "messageRegex": ".*REJEICAO_IBUT_422.*"
+  }
+]
+EOF
+
+  cat > "$allure_results_dir/environment.properties" << EOF
+Ambiente=Local Kubernetes (Kind)
+Namespace=${NAMESPACE}
+WireMock URL=http://127.0.0.1:${WIREMOCK_PORT}
+Projeto=SEFAZ Mock
+EOF
+
+  cat > "$allure_results_dir/executor.json" << EOF
+{
+  "name": "Bootstrap Local",
+  "type": "local",
+  "buildName": "Execucao local",
+  "buildUrl": "http://127.0.0.1:${ALLURE_SERVER_PORT}/index.html",
+  "reportName": "SEFAZ Mock - Allure Report"
+}
+EOF
 }
 
 # Mostra logs do WireMock
@@ -159,6 +240,905 @@ show_logs() {
   log_error "Tente reinstalar o kubectl:"
   log_error "  curl -fsSL https://dl.k8s.io/release/v1.28.0/bin/linux/amd64/kubectl -o ~/.local/bin/kubectl.new && chmod +x ~/.local/bin/kubectl.new && mv -f ~/.local/bin/kubectl.new ~/.local/bin/kubectl"
   return 1
+}
+
+generate_allure_report() {
+  local allure_results_dir="$1"
+  local allure_report_dir="$2"
+  local allure_index="$allure_report_dir/index.html"
+
+  if ! command -v npx >/dev/null 2>&1; then
+    log_error "npx não encontrado. Não foi possível gerar relatório Allure."
+    return 1
+  fi
+
+  if [ ! -d "$allure_results_dir" ]; then
+    log_error "Diretório de resultados Allure não encontrado: $allure_results_dir"
+    return 1
+  fi
+
+  log_info "Gerando dashboard Allure..."
+  npx allure generate "$allure_results_dir" --clean -o "$allure_report_dir" >/dev/null
+  customize_allure_report_ui "$allure_report_dir"
+  log_success "Dashboard Allure gerado em: $allure_report_dir"
+
+  if [ "$ALLURE_AUTO_OPEN" = "true" ]; then
+    local report_url
+    local server_port="${ALLURE_SERVER_PORT}"
+    report_url="http://127.0.0.1:${server_port}/index.html"
+
+    # Allure não carrega corretamente via file:// em alguns navegadores.
+    # Sobe um servidor HTTP local para garantir carregamento dos dados.
+    if command -v fuser >/dev/null 2>&1; then
+      fuser -k "${server_port}/tcp" 2>/dev/null || true
+    fi
+
+    if command -v python3 >/dev/null 2>&1; then
+      python3 -m http.server "${server_port}" --bind 127.0.0.1 --directory "$allure_report_dir" >/dev/null 2>&1 &
+      sleep 1
+      log_info "Dashboard Allure servido em: ${report_url}"
+    else
+      log_info "python3 não encontrado; tentando abrir arquivo local (pode ficar em loading)."
+      report_url="$allure_index"
+    fi
+
+    # Forca abertura no Chrome para evitar abrir em apps associadas ao xdg-open (ex: Bruno).
+    local chrome_exec=""
+
+    if command -v "${CHROME_CMD}" >/dev/null 2>&1; then
+      chrome_exec="${CHROME_CMD}"
+    else
+      for candidate in google-chrome google-chrome-stable chromium-browser chromium; do
+        if command -v "$candidate" >/dev/null 2>&1; then
+          chrome_exec="$candidate"
+          break
+        fi
+      done
+    fi
+
+    if [ -n "$chrome_exec" ]; then
+      log_info "Abrindo dashboard Allure no Google Chrome..."
+      "$chrome_exec" "$report_url" >/dev/null 2>&1 || true
+    elif command -v xdg-open >/dev/null 2>&1; then
+      log_info "Chrome não encontrado. Abrindo com xdg-open..."
+      xdg-open "$report_url" >/dev/null 2>&1 || true
+    else
+      log_info "Não foi possível abrir automaticamente. Acesse: $report_url"
+    fi
+  fi
+}
+
+customize_allure_report_ui() {
+  local allure_report_dir="$1"
+  local allure_index="$allure_report_dir/index.html"
+  local custom_js="$allure_report_dir/copilot-duration-widget.js"
+  local custom_css="$allure_report_dir/copilot-duration-widget.css"
+
+  cat > "$custom_css" << 'EOF'
+.copilot-duration-trend {
+  padding: 16px 18px 20px;
+  font-family: Arial, sans-serif;
+}
+
+.copilot-duration-trend__stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.copilot-duration-trend__stat {
+  border: 1px solid #e6e6e6;
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #fafafa;
+}
+
+.copilot-duration-trend__label {
+  font-size: 11px;
+  color: #777;
+  text-transform: uppercase;
+}
+
+.copilot-duration-trend__value {
+  font-size: 24px;
+  line-height: 1.2;
+  color: #222;
+  margin-top: 6px;
+}
+
+.copilot-duration-trend__chart {
+  border: 1px solid #e6e6e6;
+  border-radius: 8px;
+  padding: 10px;
+  background: #fff;
+  position: relative;
+}
+
+.copilot-duration-trend__svg {
+  width: 100%;
+  height: 220px;
+  display: block;
+  cursor: crosshair;
+}
+
+.copilot-duration-trend__axis-label {
+  font-size: 12px;
+  color: #666;
+}
+
+.copilot-duration-trend__top {
+  margin-top: 14px;
+}
+
+.copilot-duration-trend__top-title {
+  font-size: 12px;
+  color: #555;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+}
+
+.copilot-duration-trend__top-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 0;
+  border-bottom: 1px dashed #eee;
+}
+
+.copilot-duration-trend__top-name {
+  font-size: 12px;
+  color: #333;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.copilot-duration-trend__top-time {
+  font-size: 12px;
+  color: #222;
+  min-width: 52px;
+  text-align: right;
+}
+
+.copilot-duration-trend__hint {
+  margin-top: 14px;
+  font-size: 12px;
+  color: #666;
+}
+
+.copilot-duration-trend__evidence {
+  margin-top: 16px;
+  border: 1px solid #e6e6e6;
+  border-radius: 8px;
+  background: #fff;
+  padding: 12px;
+}
+
+.copilot-duration-trend__evidence-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.copilot-duration-trend__evidence-title {
+  font-size: 12px;
+  color: #555;
+  text-transform: uppercase;
+}
+
+.copilot-duration-trend__evidence-open {
+  border: 1px solid #d9d9d9;
+  border-radius: 6px;
+  background: #fafafa;
+  color: #222;
+  padding: 5px 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.copilot-duration-trend__evidence-open:hover {
+  background: #f0f0f0;
+}
+
+.copilot-duration-trend__evidence-empty {
+  color: #777;
+  font-size: 12px;
+}
+
+.copilot-duration-trend__evidence-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.copilot-duration-trend__evidence-card {
+  border: 1px solid #ececec;
+  border-radius: 7px;
+  background: #fafafa;
+  padding: 8px;
+}
+
+.copilot-duration-trend__evidence-card h4 {
+  margin: 0 0 6px;
+  font-size: 12px;
+  color: #444;
+}
+
+.copilot-duration-trend__evidence-pre {
+  margin: 0;
+  padding: 8px;
+  border-radius: 6px;
+  background: #161b22;
+  color: #e6edf3;
+  font-size: 11px;
+  line-height: 1.35;
+  max-height: 220px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.copilot-duration-trend__tooltip {
+  position: absolute;
+  z-index: 8;
+  min-width: 240px;
+  max-width: 320px;
+  background: rgba(28, 33, 39, 0.94);
+  color: #fff;
+  border-radius: 8px;
+  padding: 8px 10px;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.22);
+  pointer-events: none;
+  display: none;
+}
+
+.copilot-duration-trend__tooltip-title {
+  font-size: 12px;
+  line-height: 1.35;
+  margin-bottom: 4px;
+}
+
+.copilot-duration-trend__tooltip-meta {
+  font-size: 11px;
+  color: #b9ffcf;
+}
+
+@media (max-width: 1200px) {
+  .copilot-duration-trend__stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .copilot-duration-trend__evidence-grid {
+    grid-template-columns: 1fr;
+  }
+}
+EOF
+
+  cat > "$custom_js" << 'EOF'
+(function () {
+  function normalize(value) {
+    return (value || '').replace(/\s+/g, ' ').trim().toUpperCase();
+  }
+
+  function formatMs(value) {
+    return value >= 1000 ? (value / 1000).toFixed(2) + 's' : Math.round(value) + 'ms';
+  }
+
+  function escapeHtml(value) {
+    return String(value || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function findStepByName(step, targetName) {
+    if (!step) {
+      return null;
+    }
+
+    if (step.name === targetName) {
+      return step;
+    }
+
+    var children = Array.isArray(step.steps) ? step.steps : [];
+    for (var index = 0; index < children.length; index += 1) {
+      var nested = findStepByName(children[index], targetName);
+      if (nested) {
+        return nested;
+      }
+    }
+
+    return null;
+  }
+
+  function attachmentFromTestCase(testCase, attachmentName) {
+    var root = testCase && testCase.testStage;
+    var step = findStepByName(root, attachmentName);
+
+    if (!step || !Array.isArray(step.attachments) || !step.attachments.length) {
+      return null;
+    }
+
+    return step.attachments[0];
+  }
+
+  function fetchAttachmentSource(source) {
+    if (!source) {
+      return Promise.resolve('');
+    }
+
+    return fetch('data/attachments/' + source)
+      .then(function (response) {
+        if (!response.ok) {
+          return '';
+        }
+        return response.text();
+      })
+      .catch(function () {
+        return '';
+      });
+  }
+
+  function loadEvidence(point) {
+    if (!point || !point.uid) {
+      return Promise.resolve(null);
+    }
+
+    return fetch('data/test-cases/' + point.uid + '.json')
+      .then(function (response) {
+        if (!response.ok) {
+          return null;
+        }
+        return response.json();
+      })
+      .then(function (testCase) {
+        if (!testCase) {
+          return null;
+        }
+
+        var names = ['regra-aplicada.json', 'request-body.xml', 'response-body.xml', 'resumo-execucao.json'];
+        var attachments = names.map(function (name) {
+          return attachmentFromTestCase(testCase, name);
+        });
+
+        return Promise.all(
+          attachments.map(function (attachment) {
+            return fetchAttachmentSource(attachment && attachment.source);
+          })
+        ).then(function (contents) {
+          return {
+            uid: point.uid,
+            title: point.name,
+            duration: point.duration,
+            rule: contents[0] || '',
+            request: contents[1] || '',
+            response: contents[2] || '',
+            summary: contents[3] || ''
+          };
+        });
+      })
+      .catch(function () {
+        return null;
+      });
+  }
+
+  function percentile(values, fraction) {
+    if (!values.length) {
+      return 0;
+    }
+
+    var sorted = values.slice().sort(function (left, right) {
+      return left - right;
+    });
+    var index = Math.min(sorted.length - 1, Math.max(0, Math.ceil(sorted.length * fraction) - 1));
+    return sorted[index];
+  }
+
+  function findTrendCard() {
+    var elements = Array.prototype.slice.call(document.querySelectorAll('div, span, h1, h2, h3, h4, h5'));
+    var trendTitle = elements.find(function (element) {
+      return normalize(element.textContent) === 'TREND';
+    });
+
+    if (!trendTitle) {
+      return null;
+    }
+
+    var current = trendTitle;
+    for (var depth = 0; current && depth < 8; depth += 1) {
+      if ((current.innerText || '').indexOf('There is nothing to show') !== -1) {
+        return current;
+      }
+      current = current.parentElement;
+    }
+
+    return trendTitle.parentElement || null;
+  }
+
+  function clearPlaceholder(card) {
+    var nodes = Array.prototype.slice.call(card.querySelectorAll('*'));
+    nodes.forEach(function (node) {
+      if (normalize(node.textContent) === 'THERE IS NOTHING TO SHOW') {
+        node.style.display = 'none';
+      }
+    });
+  }
+
+  function render(card, results) {
+    if (!card || card.querySelector('.copilot-duration-trend')) {
+      return;
+    }
+
+    clearPlaceholder(card);
+
+    var durations = results.map(function (item) {
+      return item.time && typeof item.time.duration === 'number' ? item.time.duration : 0;
+    });
+
+    var totalDuration = durations.reduce(function (sum, value) {
+      return sum + value;
+    }, 0);
+    var average = durations.length ? totalDuration / durations.length : 0;
+    var max = durations.length ? Math.max.apply(null, durations) : 0;
+    var ordered = results
+      .slice()
+      .sort(function (left, right) {
+        return (left.time.start || 0) - (right.time.start || 0);
+      });
+
+    var slowest = results
+      .slice()
+      .sort(function (left, right) {
+        return (right.time.duration || 0) - (left.time.duration || 0);
+      })
+      .slice(0, 5);
+
+    var container = document.createElement('div');
+    container.className = 'copilot-duration-trend';
+
+    var stats = document.createElement('div');
+    stats.className = 'copilot-duration-trend__stats';
+
+    [
+      { label: 'Tempo total', value: formatMs(totalDuration) },
+      { label: 'Media por teste', value: formatMs(average) },
+      { label: 'P95', value: formatMs(percentile(durations, 0.95)) },
+      { label: 'Mais lento', value: formatMs(max) }
+    ].forEach(function (item) {
+      var stat = document.createElement('div');
+      stat.className = 'copilot-duration-trend__stat';
+
+      var label = document.createElement('div');
+      label.className = 'copilot-duration-trend__label';
+      label.textContent = item.label;
+
+      var value = document.createElement('div');
+      value.className = 'copilot-duration-trend__value';
+      value.textContent = item.value;
+
+      stat.appendChild(label);
+      stat.appendChild(value);
+      stats.appendChild(stat);
+    });
+
+    var chart = document.createElement('div');
+    chart.className = 'copilot-duration-trend__chart';
+
+    var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', '0 0 760 220');
+    svg.setAttribute('class', 'copilot-duration-trend__svg');
+
+    var yMax = max > 0 ? max : 1;
+    var leftPad = 44;
+    var rightPad = 14;
+    var topPad = 14;
+    var bottomPad = 26;
+    var chartWidth = 760 - leftPad - rightPad;
+    var chartHeight = 220 - topPad - bottomPad;
+
+    var baseline = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    baseline.setAttribute('x1', String(leftPad));
+    baseline.setAttribute('y1', String(topPad + chartHeight));
+    baseline.setAttribute('x2', String(leftPad + chartWidth));
+    baseline.setAttribute('y2', String(topPad + chartHeight));
+    baseline.setAttribute('stroke', '#d9d9d9');
+    baseline.setAttribute('stroke-width', '1');
+    svg.appendChild(baseline);
+
+    var midline = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    midline.setAttribute('x1', String(leftPad));
+    midline.setAttribute('y1', String(topPad + chartHeight / 2));
+    midline.setAttribute('x2', String(leftPad + chartWidth));
+    midline.setAttribute('y2', String(topPad + chartHeight / 2));
+    midline.setAttribute('stroke', '#efefef');
+    midline.setAttribute('stroke-width', '1');
+    svg.appendChild(midline);
+
+    var points = ordered.map(function (item, index) {
+      var x = leftPad + (ordered.length > 1 ? (index / (ordered.length - 1)) * chartWidth : chartWidth / 2);
+      var y = topPad + chartHeight - ((item.time.duration || 0) / yMax) * chartHeight;
+      return {
+        x: x,
+        y: y,
+        index: index,
+        duration: item.time.duration || 0,
+        name: item.name,
+        uid: item.uid || ''
+      };
+    });
+
+    var polyline = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+    polyline.setAttribute('fill', 'none');
+    polyline.setAttribute('stroke', '#2f8f57');
+    polyline.setAttribute('stroke-width', '2');
+    polyline.setAttribute(
+      'points',
+      points
+        .map(function (point) {
+          return point.x.toFixed(1) + ',' + point.y.toFixed(1);
+        })
+        .join(' ')
+    );
+    svg.appendChild(polyline);
+
+    points.forEach(function (point, index) {
+      if (index % Math.ceil(points.length / 18) !== 0 && index !== points.length - 1) {
+        return;
+      }
+
+      var dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      dot.setAttribute('cx', point.x.toFixed(1));
+      dot.setAttribute('cy', point.y.toFixed(1));
+      dot.setAttribute('r', '2.8');
+      dot.setAttribute('fill', '#7ecb5a');
+      svg.appendChild(dot);
+    });
+
+    var maxLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    maxLabel.setAttribute('x', '8');
+    maxLabel.setAttribute('y', String(topPad + 4));
+    maxLabel.setAttribute('font-size', '11');
+    maxLabel.setAttribute('fill', '#666');
+    maxLabel.textContent = formatMs(max);
+    svg.appendChild(maxLabel);
+
+    var avgLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    avgLabel.setAttribute('x', '8');
+    avgLabel.setAttribute('y', String(topPad + chartHeight / 2 + 4));
+    avgLabel.setAttribute('font-size', '11');
+    avgLabel.setAttribute('fill', '#666');
+    avgLabel.textContent = formatMs(average);
+    svg.appendChild(avgLabel);
+
+    var minLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    minLabel.setAttribute('x', '8');
+    minLabel.setAttribute('y', String(topPad + chartHeight + 4));
+    minLabel.setAttribute('font-size', '11');
+    minLabel.setAttribute('fill', '#666');
+    minLabel.textContent = '0ms';
+    svg.appendChild(minLabel);
+
+    chart.appendChild(svg);
+
+    var tooltip = document.createElement('div');
+    tooltip.className = 'copilot-duration-trend__tooltip';
+    chart.appendChild(tooltip);
+
+    var evidenceCache = {};
+    var evidence = document.createElement('div');
+    evidence.className = 'copilot-duration-trend__evidence';
+    evidence.innerHTML =
+      '<div class="copilot-duration-trend__evidence-head">' +
+      '<div class="copilot-duration-trend__evidence-title">Evidencias do teste selecionado</div>' +
+      '<button class="copilot-duration-trend__evidence-open" type="button" disabled>Abrir detalhe no Allure</button>' +
+      '</div>' +
+      '<div class="copilot-duration-trend__evidence-empty">Clique em um ponto da linha para carregar regra aplicada e corpos da execucao.</div>';
+
+    var evidenceOpenButton = evidence.querySelector('.copilot-duration-trend__evidence-open');
+    var selectedPoint = null;
+
+    function renderEvidenceContent(data) {
+      if (!data) {
+        evidence.innerHTML =
+          '<div class="copilot-duration-trend__evidence-head">' +
+          '<div class="copilot-duration-trend__evidence-title">Evidencias do teste selecionado</div>' +
+          '<button class="copilot-duration-trend__evidence-open" type="button" disabled>Abrir detalhe no Allure</button>' +
+          '</div>' +
+          '<div class="copilot-duration-trend__evidence-empty">Nao foi possivel carregar as evidencias deste teste.</div>';
+        evidenceOpenButton = evidence.querySelector('.copilot-duration-trend__evidence-open');
+        return;
+      }
+
+      evidence.innerHTML =
+        '<div class="copilot-duration-trend__evidence-head">' +
+        '<div class="copilot-duration-trend__evidence-title">Evidencias: ' +
+        escapeHtml(data.title) +
+        ' (' +
+        escapeHtml(formatMs(data.duration)) +
+        ')</div>' +
+        '<button class="copilot-duration-trend__evidence-open" type="button">Abrir detalhe no Allure</button>' +
+        '</div>' +
+        '<div class="copilot-duration-trend__evidence-grid">' +
+        '<div class="copilot-duration-trend__evidence-card"><h4>Resumo</h4><pre class="copilot-duration-trend__evidence-pre">' +
+        escapeHtml(data.summary || '{}') +
+        '</pre></div>' +
+        '<div class="copilot-duration-trend__evidence-card"><h4>Regra aplicada</h4><pre class="copilot-duration-trend__evidence-pre">' +
+        escapeHtml(data.rule || '{}') +
+        '</pre></div>' +
+        '<div class="copilot-duration-trend__evidence-card"><h4>Request Body (XML)</h4><pre class="copilot-duration-trend__evidence-pre">' +
+        escapeHtml(data.request || '<vazio>') +
+        '</pre></div>' +
+        '<div class="copilot-duration-trend__evidence-card"><h4>Response Body (XML)</h4><pre class="copilot-duration-trend__evidence-pre">' +
+        escapeHtml(data.response || '<vazio>') +
+        '</pre></div>' +
+        '</div>';
+
+      evidenceOpenButton = evidence.querySelector('.copilot-duration-trend__evidence-open');
+      evidenceOpenButton.addEventListener('click', function () {
+        openTestDetails(selectedPoint);
+      });
+    }
+
+    function showEvidence(point) {
+      if (!point || !point.uid) {
+        return;
+      }
+
+      selectedPoint = point;
+
+      if (evidenceCache[point.uid]) {
+        renderEvidenceContent(evidenceCache[point.uid]);
+        return;
+      }
+
+      evidence.innerHTML =
+        '<div class="copilot-duration-trend__evidence-head">' +
+        '<div class="copilot-duration-trend__evidence-title">Evidencias do teste selecionado</div>' +
+        '<button class="copilot-duration-trend__evidence-open" type="button" disabled>Abrir detalhe no Allure</button>' +
+        '</div>' +
+        '<div class="copilot-duration-trend__evidence-empty">Carregando evidencias...</div>';
+
+      loadEvidence(point).then(function (data) {
+        if (data) {
+          evidenceCache[point.uid] = data;
+        }
+        renderEvidenceContent(data);
+      });
+    }
+
+    function showTooltip(point, clientX, clientY) {
+      if (!point) {
+        return;
+      }
+
+      tooltip.innerHTML =
+        '<div class="copilot-duration-trend__tooltip-title">' +
+        point.name +
+        '</div>' +
+        '<div class="copilot-duration-trend__tooltip-meta">Tempo: ' +
+        formatMs(point.duration) +
+        ' | Teste #' +
+        (point.index + 1) +
+        '</div>';
+
+      tooltip.style.display = 'block';
+
+      var rect = chart.getBoundingClientRect();
+      var left = clientX - rect.left + 12;
+      var top = clientY - rect.top - 12;
+
+      if (left + 320 > rect.width) {
+        left = rect.width - 330;
+      }
+      if (top < 8) {
+        top = 8;
+      }
+
+      tooltip.style.left = left + 'px';
+      tooltip.style.top = top + 'px';
+    }
+
+    function hideTooltip() {
+      tooltip.style.display = 'none';
+    }
+
+    function nearestPointByClientX(clientX) {
+      var rect = svg.getBoundingClientRect();
+      var relativeX = ((clientX - rect.left) / rect.width) * 760;
+      var nearest = null;
+      var nearestDistance = Number.POSITIVE_INFINITY;
+
+      points.forEach(function (point) {
+        var distance = Math.abs(point.x - relativeX);
+        if (distance < nearestDistance) {
+          nearest = point;
+          nearestDistance = distance;
+        }
+      });
+
+      return nearest;
+    }
+
+    function openTestDetails(point) {
+      if (!point || !point.uid) {
+        return;
+      }
+
+      window.location.href = 'index.html#testresult/' + point.uid;
+    }
+
+    svg.addEventListener('mousemove', function (event) {
+      var point = nearestPointByClientX(event.clientX);
+      showTooltip(point, event.clientX, event.clientY);
+    });
+
+    svg.addEventListener('mouseleave', function () {
+      hideTooltip();
+    });
+
+    svg.addEventListener('click', function (event) {
+      var point = nearestPointByClientX(event.clientX);
+      showEvidence(point);
+    });
+
+    svg.addEventListener('dblclick', function (event) {
+      var point = nearestPointByClientX(event.clientX);
+      openTestDetails(point);
+    });
+
+    var axisLabel = document.createElement('div');
+    axisLabel.className = 'copilot-duration-trend__axis-label';
+    axisLabel.textContent = 'Linha temporal por ordem de execução dos testes';
+    chart.appendChild(axisLabel);
+
+    var topList = document.createElement('div');
+    topList.className = 'copilot-duration-trend__top';
+
+    var topTitle = document.createElement('div');
+    topTitle.className = 'copilot-duration-trend__top-title';
+    topTitle.textContent = 'Testes mais lentos';
+    topList.appendChild(topTitle);
+
+    slowest.forEach(function (item) {
+      var topItem = document.createElement('div');
+      topItem.className = 'copilot-duration-trend__top-item';
+
+      var topName = document.createElement('div');
+      topName.className = 'copilot-duration-trend__top-name';
+      topName.title = item.name;
+      topName.textContent = item.name;
+
+      var topTime = document.createElement('div');
+      topTime.className = 'copilot-duration-trend__top-time';
+      topTime.textContent = formatMs(item.time.duration || 0);
+
+      topItem.appendChild(topName);
+      topItem.appendChild(topTime);
+      topList.appendChild(topItem);
+    });
+
+    var hint = document.createElement('div');
+    hint.className = 'copilot-duration-trend__hint';
+    hint.textContent = 'Passe o mouse para ver o teste, clique no ponto para carregar as evidencias e use duplo clique para abrir o detalhe no Allure.';
+
+    container.appendChild(stats);
+    container.appendChild(chart);
+    container.appendChild(topList);
+    container.appendChild(hint);
+    container.appendChild(evidence);
+    card.appendChild(container);
+  }
+
+  function mount() {
+    fetch('widgets/duration.json')
+      .then(function (response) {
+        return response.json();
+      })
+      .then(function (results) {
+        if (!Array.isArray(results) || !results.length) {
+          return;
+        }
+
+        var card = findTrendCard();
+        if (!card) {
+          return;
+        }
+
+        render(card, results);
+      })
+      .catch(function () {
+        return undefined;
+      });
+  }
+
+  function boot() {
+    mount();
+    setTimeout(mount, 500);
+    setTimeout(mount, 1500);
+    setTimeout(mount, 3000);
+
+    if (typeof MutationObserver !== 'undefined') {
+      var observer = new MutationObserver(function () {
+        mount();
+      });
+      observer.observe(document.body, { childList: true, subtree: true });
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    boot();
+  }
+})();
+EOF
+
+  if ! grep -q 'copilot-duration-widget.css' "$allure_index"; then
+    perl -0pi -e 's#</head>#    <link rel="stylesheet" type="text/css" href="copilot-duration-widget.css">\n</head>#' "$allure_index"
+  fi
+
+  if ! grep -q 'copilot-duration-widget.js' "$allure_index"; then
+    perl -0pi -e 's#</body>#    <script src="copilot-duration-widget.js"></script>\n</body>#' "$allure_index"
+  fi
+}
+
+run_all() {
+  LOGS_PID=""
+  local run_id
+  run_id="$(date +%Y%m%d-%H%M%S)"
+  local run_log_dir="$LOG_DIR/$run_id"
+  local all_log_file="$run_log_dir/all.log"
+  local wiremock_log_file="$run_log_dir/wiremock.log"
+  local tests_log_file="$run_log_dir/tests.log"
+  local allure_results_dir="$run_log_dir/allure-results"
+  local allure_report_dir="$run_log_dir/allure-report"
+
+  mkdir -p "$run_log_dir" "$allure_results_dir"
+  log_info "Salvando logs desta execucao em: $run_log_dir"
+
+  # Captura toda saida do bootstrap all no arquivo all.log e mantém no terminal.
+  exec > >(tee -a "$all_log_file") 2>&1
+
+  check_requirements
+  create_kind_cluster
+  generate_test_data
+  apply_terraform
+  wait_for_wiremock
+  start_port_forward
+
+  log_info "Iniciando stream de logs do WireMock em background..."
+  kubectl -n "${NAMESPACE}" logs -f deploy/wiremock --tail=200 2>&1 | tee "$wiremock_log_file" &
+  LOGS_PID=$!
+
+  export TESTS_LOG_FILE="$tests_log_file"
+  export ALLURE_RESULTS_DIR="$allure_results_dir"
+  prepare_allure_template "$allure_results_dir"
+
+  cleanup_all() {
+    if [ -n "${LOGS_PID}" ] && kill -0 "${LOGS_PID}" 2>/dev/null; then
+      kill "${LOGS_PID}" 2>/dev/null || true
+    fi
+  }
+  trap cleanup_all EXIT
+
+  run_tests
+  generate_allure_report "$allure_results_dir" "$allure_report_dir"
+  cleanup_all
+  trap - EXIT
+
+  log_success "Fluxo all concluido (ambiente mantido ativo)."
+  log_info "Use 'bash scripts/bootstrap-k8s-local.sh down' para destruir a infraestrutura."
+  log_info "Relatorios gerados:"
+  log_info "  - $all_log_file"
+  log_info "  - $wiremock_log_file"
+  log_info "  - $tests_log_file"
+  log_info "  - $allure_report_dir/index.html"
+  log_info "  - http://127.0.0.1:${ALLURE_SERVER_PORT}/index.html"
 }
 
 # Destrui infraestrutura
@@ -203,6 +1183,10 @@ main() {
     logs)
       show_logs
       ;;
+    all)
+      log_info "=== BOOTSTRAP ALL ==="
+      run_all
+      ;;
     down)
       log_info "=== BOOTSTRAP DOWN ==="
       destroy_infrastructure
@@ -215,6 +1199,7 @@ Comandos:
   up    - Cria cluster, provisiona infra e aguarda WireMock (padrão)
   test  - Executa testes Playwright contra WireMock já subido
   logs  - Exibe logs da stream do WireMock
+  all   - Executa up + logs + testes + dashboard Allure em um unico comando
   down  - Destrui infraestrutura (keep cluster Kind)
 
 Exemplo ponta a ponta:

@@ -1,6 +1,6 @@
 const { test, expect } = require('@playwright/test');
 const { buildNfeXml } = require('../utils/xml');
-const ufMatrix = require('../data/ufs.v2026-04-01.json');
+const ufMatrix = require('../data/ufs.json');
 
 function parseFilterList(value) {
   if (!value) {
@@ -22,6 +22,50 @@ const filteredRules = ufMatrix.rules.filter((rule) => {
   return ufOk && regimeOk;
 });
 
+async function attachExecutionEvidence(testInfo, scenario, rule, requestBody, statusCode, responseBody) {
+  const ruleSummary = {
+    scenario,
+    uf: rule.uf,
+    cfop: rule.cfop,
+    regimeTributario: rule.regimeTributario,
+    vigenciaInicio: rule.vigenciaInicio,
+    vigenciaFim: rule.vigenciaFim,
+    vIBS: rule.vIBS,
+    vCBS: rule.vCBS
+  };
+
+  await testInfo.attach('regra-aplicada.json', {
+    contentType: 'application/json',
+    body: Buffer.from(JSON.stringify(ruleSummary, null, 2), 'utf8')
+  });
+
+  await testInfo.attach('request-body.xml', {
+    contentType: 'application/xml',
+    body: Buffer.from(requestBody, 'utf8')
+  });
+
+  await testInfo.attach('response-body.xml', {
+    contentType: 'application/xml',
+    body: Buffer.from(responseBody, 'utf8')
+  });
+
+  await testInfo.attach('resumo-execucao.json', {
+    contentType: 'application/json',
+    body: Buffer.from(
+      JSON.stringify(
+        {
+          scenario,
+          statusCode,
+          endpoint: '/sefaz/autorizar'
+        },
+        null,
+        2
+      ),
+      'utf8'
+    )
+  });
+}
+
 if (!filteredRules.length) {
   throw new Error('Nenhuma regra encontrada para os filtros informados (TEST_UFS/TEST_REGIMES).');
 }
@@ -35,7 +79,7 @@ test.describe('NF-e piloto IBS/CBS', () => {
         rule.cfop +
         ' regime ' +
         rule.regimeTributario,
-      async ({ request, baseURL }) => {
+      async ({ request, baseURL }, testInfo) => {
       const xml = buildNfeXml({
         uf: rule.uf,
         cfop: rule.cfop,
@@ -53,6 +97,7 @@ test.describe('NF-e piloto IBS/CBS', () => {
       expect([200, 201]).toContain(response.status());
 
       const body = await response.text();
+      await attachExecutionEvidence(testInfo, 'AUTORIZACAO_VALIDA', rule, xml, response.status(), body);
       expect(body).toContain('AUTORIZADO');
       }
     );
@@ -64,7 +109,7 @@ test.describe('NF-e piloto IBS/CBS', () => {
         rule.cfop +
         ' regime ' +
         rule.regimeTributario,
-      async ({ request, baseURL }) => {
+      async ({ request, baseURL }, testInfo) => {
       const xml = buildNfeXml({
         uf: rule.uf,
         cfop: rule.cfop,
@@ -82,6 +127,7 @@ test.describe('NF-e piloto IBS/CBS', () => {
       expect(response.status()).toBe(422);
 
       const body = await response.text();
+      await attachExecutionEvidence(testInfo, 'REJEICAO_IBUT_422', rule, xml, response.status(), body);
       expect(body).toContain('REJEICAO_IBUT_422');
       expect(body).toContain('<uf>' + rule.uf + '</uf>');
       expect(body).toContain('<cfop>' + rule.cfop + '</cfop>');
@@ -96,7 +142,7 @@ test.describe('NF-e piloto IBS/CBS', () => {
         rule.cfop +
         ' regime ' +
         rule.regimeTributario,
-      async ({ request, baseURL }) => {
+      async ({ request, baseURL }, testInfo) => {
       const xml = buildNfeXml({
         uf: rule.uf,
         cfop: rule.cfop,
@@ -114,6 +160,7 @@ test.describe('NF-e piloto IBS/CBS', () => {
       expect(response.status()).toBe(422);
 
       const body = await response.text();
+      await attachExecutionEvidence(testInfo, 'REJEICAO_REGRA_NAO_ENCONTRADA', rule, xml, response.status(), body);
       expect(body).toContain('REJEICAO_REGRA_NAO_ENCONTRADA');
       expect(body).toContain('<uf>' + rule.uf + '</uf>');
       expect(body).toContain('<cfop>' + rule.cfop + '</cfop>');

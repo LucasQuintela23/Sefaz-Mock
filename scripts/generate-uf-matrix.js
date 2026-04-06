@@ -1,7 +1,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
-const OUT_PATH = path.join(__dirname, '..', 'tests', 'data', 'ufs.v2026-04-01.json');
+const OUT_PATH = path.join(__dirname, '..', 'tests', 'data', 'ufs.json');
 const VIGENCIA_INICIO = '2026-04-01';
 const VIGENCIA_FIM = '2026-12-31';
 
@@ -47,12 +47,24 @@ function buildRules() {
 }
 
 function main() {
+  const rules = buildRules();
+  const sampleCases = rules
+    .filter((rule) => rule.uf === 'SP' || rule.uf === 'RJ')
+    .slice(0, 2)
+    .map((rule) => ({
+      uf: rule.uf,
+      vIBS: rule.vIBS,
+      vCBS: rule.vCBS,
+      expectedStatus: 200
+    }));
+
   const payload = {
     version: VIGENCIA_INICIO,
     generatedAt: VIGENCIA_INICIO + 'T00:00:00.000Z',
     totalUFs: UFS.length,
     totalRules: UFS.length * REGIMES.length,
-    rules: buildRules()
+    cases: sampleCases,
+    rules
   };
 
   fs.writeFileSync(OUT_PATH, JSON.stringify(payload, null, 2) + '\n');

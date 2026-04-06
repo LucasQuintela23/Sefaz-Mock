@@ -1,7 +1,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
-const matrixPath = process.env.UF_MATRIX_PATH || path.join(__dirname, '..', 'tests', 'data', 'ufs.v2026-04-01.json');
+const matrixPath = process.env.UF_MATRIX_PATH || path.join(__dirname, '..', 'tests', 'data', 'ufs.json');
 const outputDir = process.env.BATCH_SUMMARY_DIR || path.join(__dirname, '..', 'artifacts');
 const batchName = process.env.BATCH_NAME || 'local';
 const testUfsRaw = process.env.TEST_UFS || '';
