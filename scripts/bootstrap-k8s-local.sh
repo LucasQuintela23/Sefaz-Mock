@@ -25,11 +25,22 @@ log_success() {
 # Verifica pré-requisitos
 check_requirements() {
   local missing=0
+  local cmd_path
   
   for cmd in kind kubectl terraform npm; do
     if ! command -v "$cmd" &>/dev/null; then
       log_error "Comando '$cmd' não encontrado. Instale antes de continuar."
       missing=1
+      continue
+    fi
+
+    cmd_path="$(command -v "$cmd")"
+    if [ ! -x "$cmd_path" ]; then
+      log_info "Ajustando permissão de execução para '$cmd' em $cmd_path..."
+      if ! chmod +x "$cmd_path" 2>/dev/null; then
+        log_error "Sem permissão para executar '$cmd' em $cmd_path. Rode: chmod +x $cmd_path"
+        missing=1
+      fi
     fi
   done
   
@@ -135,7 +146,19 @@ run_tests() {
 # Mostra logs do WireMock
 show_logs() {
   log_info "Logs do WireMock (últimas 50 linhas):"
-  kubectl -n "${NAMESPACE}" logs -f deploy/wiremock --tail=50
+  local attempt
+  for attempt in 1 2 3; do
+    if kubectl -n "${NAMESPACE}" logs -f deploy/wiremock --tail=50; then
+      return 0
+    fi
+    log_info "Falha ao executar kubectl logs (tentativa ${attempt}/3). Repetindo..."
+    sleep 1
+  done
+
+  log_error "Nao foi possivel executar kubectl logs."
+  log_error "Tente reinstalar o kubectl:"
+  log_error "  curl -fsSL https://dl.k8s.io/release/v1.28.0/bin/linux/amd64/kubectl -o ~/.local/bin/kubectl.new && chmod +x ~/.local/bin/kubectl.new && mv -f ~/.local/bin/kubectl.new ~/.local/bin/kubectl"
+  return 1
 }
 
 # Destrui infraestrutura
