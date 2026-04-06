@@ -78,6 +78,37 @@ Fluxo opcional com WireMock via Docker:
 3. Derrubar ambiente:
 	docker compose down
 
+## Fluxo recomendado: Kubernetes local com Terraform (Sprint C)
+
+Para ambiente reproduzivel com Kubernetes local (Kind) e provisionamento declarativo:
+
+1. Bootstrap completo em um comando:
+	bash scripts/bootstrap-k8s-local.sh up
+
+   Isso automaticamente:
+   - Cria cluster Kind
+   - Gera dados de teste
+   - Provisiona namespace, configmap, deployment e service via Terraform
+   - Aguarda WireMock estar ready
+   - Inicia port-forward para 127.0.0.1:18080
+
+2. Rodar testes (em outro terminal):
+	bash scripts/bootstrap-k8s-local.sh test
+
+3. Ver logs do WireMock:
+	bash scripts/bootstrap-k8s-local.sh logs
+
+4. Encerrar (cleanup de infra, mantém cluster):
+	bash scripts/bootstrap-k8s-local.sh down
+
+Alternativa via npm scripts:
+	npm run k8s:up
+	npm run test:k8s
+	npm run k8s:logs
+	npm run k8s:down
+
+Para detalhes completos, ver [infra/README.md](infra/README.md).
+
 ## Matriz fiscal piloto (Sprint B)
 
 - Arquivo versionado: `tests/data/ufs.v2026-04-01.json`
