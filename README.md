@@ -111,7 +111,7 @@ Para detalhes completos, ver [infra/README.md](infra/README.md).
 
 ## Matriz fiscal piloto (Sprint B)
 
-- Arquivo versionado: `tests/data/ufs.v2026-04-01.json`
+- Arquivo de matriz: `tests/data/ufs.json`
 - Matriz expandida: 27 UFs x 2 regimes tributarios (54 regras)
 - Regimes cobertos: SIMPLES_NACIONAL e LUCRO_REAL
 - CFOP utilizados: 6101, 6102 e 6108
@@ -125,7 +125,7 @@ Geracao automatica da matriz (sem manutencao manual):
 1. Executar:
 	npm run matrix:generate
 2. Arquivo gerado:
-	tests/data/ufs.v2026-04-01.json
+	tests/data/ufs.json
 
 Particionamento por lote (CI/local):
 1. Definir lote de UFs via variavel:

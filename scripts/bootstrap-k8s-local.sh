@@ -6,6 +6,8 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LOG_DIR="${LOG_DIR:-$ROOT_DIR/logs}"
 ALLURE_AUTO_OPEN="${ALLURE_AUTO_OPEN:-true}"
+CHROME_CMD="${CHROME_CMD:-google-chrome}"
+ALLURE_SERVER_PORT="${ALLURE_SERVER_PORT:-5252}"
 CLUSTER_NAME="${CLUSTER_NAME:-sefaz-mock}"
 NAMESPACE="${NAMESPACE:-sefaz-mock}"
 WIREMOCK_PORT="${WIREMOCK_PORT:-18080}"
@@ -145,8 +147,30 @@ run_tests() {
   cd "$ROOT_DIR"
   
   export SEFAZ_API_URL="http://127.0.0.1:${WIREMOCK_PORT}"
-  export TEST_UFS="${TEST_UFS:-SP,RJ}"
-  export TEST_REGIMES="${TEST_REGIMES:-SIMPLES_NACIONAL}"
+  # Sem filtros por padrão: executa todos os casos da matriz.
+  export TEST_UFS="${TEST_UFS:-}"
+  export TEST_REGIMES="${TEST_REGIMES:-}"
+
+  # Permite usar ALL como alias para "sem filtro".
+  if [ "${TEST_UFS}" = "ALL" ]; then
+    TEST_UFS=""
+  fi
+  if [ "${TEST_REGIMES}" = "ALL" ]; then
+    TEST_REGIMES=""
+  fi
+
+  if [ -n "${TEST_UFS}" ]; then
+    log_info "Filtro ativo TEST_UFS=${TEST_UFS}"
+  else
+    log_info "Filtro ativo TEST_UFS=ALL"
+  fi
+
+  if [ -n "${TEST_REGIMES}" ]; then
+    log_info "Filtro ativo TEST_REGIMES=${TEST_REGIMES}"
+  else
+    log_info "Filtro ativo TEST_REGIMES=ALL"
+  fi
+
   export ALLURE_RESULTS_DIR="${ALLURE_RESULTS_DIR:-$ROOT_DIR/allure-results}"
 
   if [ -n "${TESTS_LOG_FILE:-}" ]; then
@@ -156,6 +180,44 @@ run_tests() {
   fi
   
   log_success "Testes concluído"
+}
+
+prepare_allure_template() {
+  local allure_results_dir="$1"
+
+  mkdir -p "$allure_results_dir"
+
+  cat > "$allure_results_dir/categories.json" << 'EOF'
+[
+  {
+    "name": "Regra fiscal nao encontrada",
+    "matchedStatuses": ["failed"],
+    "messageRegex": ".*REJEICAO_REGRA_NAO_ENCONTRADA.*"
+  },
+  {
+    "name": "Divergencia de IBS/CBS",
+    "matchedStatuses": ["failed"],
+    "messageRegex": ".*REJEICAO_IBUT_422.*"
+  }
+]
+EOF
+
+  cat > "$allure_results_dir/environment.properties" << EOF
+Ambiente=Local Kubernetes (Kind)
+Namespace=${NAMESPACE}
+WireMock URL=http://127.0.0.1:${WIREMOCK_PORT}
+Projeto=SEFAZ Mock
+EOF
+
+  cat > "$allure_results_dir/executor.json" << EOF
+{
+  "name": "Bootstrap Local",
+  "type": "local",
+  "buildName": "Execucao local",
+  "buildUrl": "http://127.0.0.1:${ALLURE_SERVER_PORT}/index.html",
+  "reportName": "SEFAZ Mock - Allure Report"
+}
+EOF
 }
 
 # Mostra logs do WireMock
@@ -193,11 +255,565 @@ generate_allure_report() {
 
   log_info "Gerando dashboard Allure..."
   npx allure generate "$allure_results_dir" --clean -o "$allure_report_dir" >/dev/null
+  customize_allure_report_ui "$allure_report_dir"
   log_success "Dashboard Allure gerado em: $allure_report_dir"
 
-  if [ "$ALLURE_AUTO_OPEN" = "true" ] && command -v xdg-open >/dev/null 2>&1; then
-    log_info "Abrindo dashboard Allure no navegador..."
-    xdg-open "$allure_index" >/dev/null 2>&1 || true
+  if [ "$ALLURE_AUTO_OPEN" = "true" ]; then
+    local report_url
+    local server_port="${ALLURE_SERVER_PORT}"
+    report_url="http://127.0.0.1:${server_port}/index.html"
+
+    # Allure não carrega corretamente via file:// em alguns navegadores.
+    # Sobe um servidor HTTP local para garantir carregamento dos dados.
+    if command -v fuser >/dev/null 2>&1; then
+      fuser -k "${server_port}/tcp" 2>/dev/null || true
+    fi
+
+    if command -v python3 >/dev/null 2>&1; then
+      python3 -m http.server "${server_port}" --bind 127.0.0.1 --directory "$allure_report_dir" >/dev/null 2>&1 &
+      sleep 1
+      log_info "Dashboard Allure servido em: ${report_url}"
+    else
+      log_info "python3 não encontrado; tentando abrir arquivo local (pode ficar em loading)."
+      report_url="$allure_index"
+    fi
+
+    # Forca abertura no Chrome para evitar abrir em apps associadas ao xdg-open (ex: Bruno).
+    local chrome_exec=""
+
+    if command -v "${CHROME_CMD}" >/dev/null 2>&1; then
+      chrome_exec="${CHROME_CMD}"
+    else
+      for candidate in google-chrome google-chrome-stable chromium-browser chromium; do
+        if command -v "$candidate" >/dev/null 2>&1; then
+          chrome_exec="$candidate"
+          break
+        fi
+      done
+    fi
+
+    if [ -n "$chrome_exec" ]; then
+      log_info "Abrindo dashboard Allure no Google Chrome..."
+      "$chrome_exec" "$report_url" >/dev/null 2>&1 || true
+    elif command -v xdg-open >/dev/null 2>&1; then
+      log_info "Chrome não encontrado. Abrindo com xdg-open..."
+      xdg-open "$report_url" >/dev/null 2>&1 || true
+    else
+      log_info "Não foi possível abrir automaticamente. Acesse: $report_url"
+    fi
+  fi
+}
+
+customize_allure_report_ui() {
+  local allure_report_dir="$1"
+  local allure_index="$allure_report_dir/index.html"
+  local custom_js="$allure_report_dir/copilot-duration-widget.js"
+  local custom_css="$allure_report_dir/copilot-duration-widget.css"
+
+  cat > "$custom_css" << 'EOF'
+.copilot-duration-trend {
+  padding: 16px 18px 20px;
+  font-family: Arial, sans-serif;
+}
+
+.copilot-duration-trend__stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.copilot-duration-trend__stat {
+  border: 1px solid #e6e6e6;
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #fafafa;
+}
+
+.copilot-duration-trend__label {
+  font-size: 11px;
+  color: #777;
+  text-transform: uppercase;
+}
+
+.copilot-duration-trend__value {
+  font-size: 24px;
+  line-height: 1.2;
+  color: #222;
+  margin-top: 6px;
+}
+
+.copilot-duration-trend__chart {
+  border: 1px solid #e6e6e6;
+  border-radius: 8px;
+  padding: 10px;
+  background: #fff;
+  position: relative;
+}
+
+.copilot-duration-trend__svg {
+  width: 100%;
+  height: 220px;
+  display: block;
+  cursor: crosshair;
+}
+
+.copilot-duration-trend__axis-label {
+  font-size: 12px;
+  color: #666;
+}
+
+.copilot-duration-trend__top {
+  margin-top: 14px;
+}
+
+.copilot-duration-trend__top-title {
+  font-size: 12px;
+  color: #555;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+}
+
+.copilot-duration-trend__top-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 0;
+  border-bottom: 1px dashed #eee;
+}
+
+.copilot-duration-trend__top-name {
+  font-size: 12px;
+  color: #333;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.copilot-duration-trend__top-time {
+  font-size: 12px;
+  color: #222;
+  min-width: 52px;
+  text-align: right;
+}
+
+.copilot-duration-trend__hint {
+  margin-top: 14px;
+  font-size: 12px;
+  color: #666;
+}
+
+.copilot-duration-trend__tooltip {
+  position: absolute;
+  z-index: 8;
+  min-width: 240px;
+  max-width: 320px;
+  background: rgba(28, 33, 39, 0.94);
+  color: #fff;
+  border-radius: 8px;
+  padding: 8px 10px;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.22);
+  pointer-events: none;
+  display: none;
+}
+
+.copilot-duration-trend__tooltip-title {
+  font-size: 12px;
+  line-height: 1.35;
+  margin-bottom: 4px;
+}
+
+.copilot-duration-trend__tooltip-meta {
+  font-size: 11px;
+  color: #b9ffcf;
+}
+
+@media (max-width: 1200px) {
+  .copilot-duration-trend__stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+EOF
+
+  cat > "$custom_js" << 'EOF'
+(function () {
+  function normalize(value) {
+    return (value || '').replace(/\s+/g, ' ').trim().toUpperCase();
+  }
+
+  function formatMs(value) {
+    return value >= 1000 ? (value / 1000).toFixed(2) + 's' : Math.round(value) + 'ms';
+  }
+
+  function percentile(values, fraction) {
+    if (!values.length) {
+      return 0;
+    }
+
+    var sorted = values.slice().sort(function (left, right) {
+      return left - right;
+    });
+    var index = Math.min(sorted.length - 1, Math.max(0, Math.ceil(sorted.length * fraction) - 1));
+    return sorted[index];
+  }
+
+  function findTrendCard() {
+    var elements = Array.prototype.slice.call(document.querySelectorAll('div, span, h1, h2, h3, h4, h5'));
+    var trendTitle = elements.find(function (element) {
+      return normalize(element.textContent) === 'TREND';
+    });
+
+    if (!trendTitle) {
+      return null;
+    }
+
+    var current = trendTitle;
+    for (var depth = 0; current && depth < 8; depth += 1) {
+      if ((current.innerText || '').indexOf('There is nothing to show') !== -1) {
+        return current;
+      }
+      current = current.parentElement;
+    }
+
+    return trendTitle.parentElement || null;
+  }
+
+  function clearPlaceholder(card) {
+    var nodes = Array.prototype.slice.call(card.querySelectorAll('*'));
+    nodes.forEach(function (node) {
+      if (normalize(node.textContent) === 'THERE IS NOTHING TO SHOW') {
+        node.style.display = 'none';
+      }
+    });
+  }
+
+  function render(card, results) {
+    if (!card || card.querySelector('.copilot-duration-trend')) {
+      return;
+    }
+
+    clearPlaceholder(card);
+
+    var durations = results.map(function (item) {
+      return item.time && typeof item.time.duration === 'number' ? item.time.duration : 0;
+    });
+
+    var totalDuration = durations.reduce(function (sum, value) {
+      return sum + value;
+    }, 0);
+    var average = durations.length ? totalDuration / durations.length : 0;
+    var max = durations.length ? Math.max.apply(null, durations) : 0;
+    var ordered = results
+      .slice()
+      .sort(function (left, right) {
+        return (left.time.start || 0) - (right.time.start || 0);
+      });
+
+    var slowest = results
+      .slice()
+      .sort(function (left, right) {
+        return (right.time.duration || 0) - (left.time.duration || 0);
+      })
+      .slice(0, 5);
+
+    var container = document.createElement('div');
+    container.className = 'copilot-duration-trend';
+
+    var stats = document.createElement('div');
+    stats.className = 'copilot-duration-trend__stats';
+
+    [
+      { label: 'Tempo total', value: formatMs(totalDuration) },
+      { label: 'Media por teste', value: formatMs(average) },
+      { label: 'P95', value: formatMs(percentile(durations, 0.95)) },
+      { label: 'Mais lento', value: formatMs(max) }
+    ].forEach(function (item) {
+      var stat = document.createElement('div');
+      stat.className = 'copilot-duration-trend__stat';
+
+      var label = document.createElement('div');
+      label.className = 'copilot-duration-trend__label';
+      label.textContent = item.label;
+
+      var value = document.createElement('div');
+      value.className = 'copilot-duration-trend__value';
+      value.textContent = item.value;
+
+      stat.appendChild(label);
+      stat.appendChild(value);
+      stats.appendChild(stat);
+    });
+
+    var chart = document.createElement('div');
+    chart.className = 'copilot-duration-trend__chart';
+
+    var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', '0 0 760 220');
+    svg.setAttribute('class', 'copilot-duration-trend__svg');
+
+    var yMax = max > 0 ? max : 1;
+    var leftPad = 44;
+    var rightPad = 14;
+    var topPad = 14;
+    var bottomPad = 26;
+    var chartWidth = 760 - leftPad - rightPad;
+    var chartHeight = 220 - topPad - bottomPad;
+
+    var baseline = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    baseline.setAttribute('x1', String(leftPad));
+    baseline.setAttribute('y1', String(topPad + chartHeight));
+    baseline.setAttribute('x2', String(leftPad + chartWidth));
+    baseline.setAttribute('y2', String(topPad + chartHeight));
+    baseline.setAttribute('stroke', '#d9d9d9');
+    baseline.setAttribute('stroke-width', '1');
+    svg.appendChild(baseline);
+
+    var midline = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    midline.setAttribute('x1', String(leftPad));
+    midline.setAttribute('y1', String(topPad + chartHeight / 2));
+    midline.setAttribute('x2', String(leftPad + chartWidth));
+    midline.setAttribute('y2', String(topPad + chartHeight / 2));
+    midline.setAttribute('stroke', '#efefef');
+    midline.setAttribute('stroke-width', '1');
+    svg.appendChild(midline);
+
+    var points = ordered.map(function (item, index) {
+      var x = leftPad + (ordered.length > 1 ? (index / (ordered.length - 1)) * chartWidth : chartWidth / 2);
+      var y = topPad + chartHeight - ((item.time.duration || 0) / yMax) * chartHeight;
+      return {
+        x: x,
+        y: y,
+        index: index,
+        duration: item.time.duration || 0,
+        name: item.name,
+        uid: item.uid || ''
+      };
+    });
+
+    var polyline = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+    polyline.setAttribute('fill', 'none');
+    polyline.setAttribute('stroke', '#2f8f57');
+    polyline.setAttribute('stroke-width', '2');
+    polyline.setAttribute(
+      'points',
+      points
+        .map(function (point) {
+          return point.x.toFixed(1) + ',' + point.y.toFixed(1);
+        })
+        .join(' ')
+    );
+    svg.appendChild(polyline);
+
+    points.forEach(function (point, index) {
+      if (index % Math.ceil(points.length / 18) !== 0 && index !== points.length - 1) {
+        return;
+      }
+
+      var dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      dot.setAttribute('cx', point.x.toFixed(1));
+      dot.setAttribute('cy', point.y.toFixed(1));
+      dot.setAttribute('r', '2.8');
+      dot.setAttribute('fill', '#7ecb5a');
+      svg.appendChild(dot);
+    });
+
+    var maxLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    maxLabel.setAttribute('x', '8');
+    maxLabel.setAttribute('y', String(topPad + 4));
+    maxLabel.setAttribute('font-size', '11');
+    maxLabel.setAttribute('fill', '#666');
+    maxLabel.textContent = formatMs(max);
+    svg.appendChild(maxLabel);
+
+    var avgLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    avgLabel.setAttribute('x', '8');
+    avgLabel.setAttribute('y', String(topPad + chartHeight / 2 + 4));
+    avgLabel.setAttribute('font-size', '11');
+    avgLabel.setAttribute('fill', '#666');
+    avgLabel.textContent = formatMs(average);
+    svg.appendChild(avgLabel);
+
+    var minLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    minLabel.setAttribute('x', '8');
+    minLabel.setAttribute('y', String(topPad + chartHeight + 4));
+    minLabel.setAttribute('font-size', '11');
+    minLabel.setAttribute('fill', '#666');
+    minLabel.textContent = '0ms';
+    svg.appendChild(minLabel);
+
+    chart.appendChild(svg);
+
+    var tooltip = document.createElement('div');
+    tooltip.className = 'copilot-duration-trend__tooltip';
+    chart.appendChild(tooltip);
+
+    function showTooltip(point, clientX, clientY) {
+      if (!point) {
+        return;
+      }
+
+      tooltip.innerHTML =
+        '<div class="copilot-duration-trend__tooltip-title">' +
+        point.name +
+        '</div>' +
+        '<div class="copilot-duration-trend__tooltip-meta">Tempo: ' +
+        formatMs(point.duration) +
+        ' | Teste #' +
+        (point.index + 1) +
+        '</div>';
+
+      tooltip.style.display = 'block';
+
+      var rect = chart.getBoundingClientRect();
+      var left = clientX - rect.left + 12;
+      var top = clientY - rect.top - 12;
+
+      if (left + 320 > rect.width) {
+        left = rect.width - 330;
+      }
+      if (top < 8) {
+        top = 8;
+      }
+
+      tooltip.style.left = left + 'px';
+      tooltip.style.top = top + 'px';
+    }
+
+    function hideTooltip() {
+      tooltip.style.display = 'none';
+    }
+
+    function nearestPointByClientX(clientX) {
+      var rect = svg.getBoundingClientRect();
+      var relativeX = ((clientX - rect.left) / rect.width) * 760;
+      var nearest = null;
+      var nearestDistance = Number.POSITIVE_INFINITY;
+
+      points.forEach(function (point) {
+        var distance = Math.abs(point.x - relativeX);
+        if (distance < nearestDistance) {
+          nearest = point;
+          nearestDistance = distance;
+        }
+      });
+
+      return nearest;
+    }
+
+    function openTestDetails(point) {
+      if (!point || !point.uid) {
+        return;
+      }
+
+      window.location.href = 'index.html#testresult/' + point.uid;
+    }
+
+    svg.addEventListener('mousemove', function (event) {
+      var point = nearestPointByClientX(event.clientX);
+      showTooltip(point, event.clientX, event.clientY);
+    });
+
+    svg.addEventListener('mouseleave', function () {
+      hideTooltip();
+    });
+
+    svg.addEventListener('click', function (event) {
+      var point = nearestPointByClientX(event.clientX);
+      openTestDetails(point);
+    });
+
+    var axisLabel = document.createElement('div');
+    axisLabel.className = 'copilot-duration-trend__axis-label';
+    axisLabel.textContent = 'Linha temporal por ordem de execução dos testes';
+    chart.appendChild(axisLabel);
+
+    var topList = document.createElement('div');
+    topList.className = 'copilot-duration-trend__top';
+
+    var topTitle = document.createElement('div');
+    topTitle.className = 'copilot-duration-trend__top-title';
+    topTitle.textContent = 'Testes mais lentos';
+    topList.appendChild(topTitle);
+
+    slowest.forEach(function (item) {
+      var topItem = document.createElement('div');
+      topItem.className = 'copilot-duration-trend__top-item';
+
+      var topName = document.createElement('div');
+      topName.className = 'copilot-duration-trend__top-name';
+      topName.title = item.name;
+      topName.textContent = item.name;
+
+      var topTime = document.createElement('div');
+      topTime.className = 'copilot-duration-trend__top-time';
+      topTime.textContent = formatMs(item.time.duration || 0);
+
+      topItem.appendChild(topName);
+      topItem.appendChild(topTime);
+      topList.appendChild(topItem);
+    });
+
+    var hint = document.createElement('div');
+    hint.className = 'copilot-duration-trend__hint';
+    hint.textContent = 'Passe o mouse para ver o teste e clique no ponto para abrir os detalhes do log no Allure.';
+
+    container.appendChild(stats);
+    container.appendChild(chart);
+    container.appendChild(topList);
+    container.appendChild(hint);
+    card.appendChild(container);
+  }
+
+  function mount() {
+    fetch('widgets/duration.json')
+      .then(function (response) {
+        return response.json();
+      })
+      .then(function (results) {
+        if (!Array.isArray(results) || !results.length) {
+          return;
+        }
+
+        var card = findTrendCard();
+        if (!card) {
+          return;
+        }
+
+        render(card, results);
+      })
+      .catch(function () {
+        return undefined;
+      });
+  }
+
+  function boot() {
+    mount();
+    setTimeout(mount, 500);
+    setTimeout(mount, 1500);
+    setTimeout(mount, 3000);
+
+    if (typeof MutationObserver !== 'undefined') {
+      var observer = new MutationObserver(function () {
+        mount();
+      });
+      observer.observe(document.body, { childList: true, subtree: true });
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    boot();
+  }
+})();
+EOF
+
+  if ! grep -q 'copilot-duration-widget.css' "$allure_index"; then
+    perl -0pi -e 's#</head>#    <link rel="stylesheet" type="text/css" href="copilot-duration-widget.css">\n</head>#' "$allure_index"
+  fi
+
+  if ! grep -q 'copilot-duration-widget.js' "$allure_index"; then
+    perl -0pi -e 's#</body>#    <script src="copilot-duration-widget.js"></script>\n</body>#' "$allure_index"
   fi
 }
 
@@ -212,7 +828,7 @@ run_all() {
   local allure_results_dir="$run_log_dir/allure-results"
   local allure_report_dir="$run_log_dir/allure-report"
 
-  mkdir -p "$run_log_dir"
+  mkdir -p "$run_log_dir" "$allure_results_dir"
   log_info "Salvando logs desta execucao em: $run_log_dir"
 
   # Captura toda saida do bootstrap all no arquivo all.log e mantém no terminal.
@@ -231,6 +847,7 @@ run_all() {
 
   export TESTS_LOG_FILE="$tests_log_file"
   export ALLURE_RESULTS_DIR="$allure_results_dir"
+  prepare_allure_template "$allure_results_dir"
 
   cleanup_all() {
     if [ -n "${LOGS_PID}" ] && kill -0 "${LOGS_PID}" 2>/dev/null; then
@@ -251,6 +868,7 @@ run_all() {
   log_info "  - $wiremock_log_file"
   log_info "  - $tests_log_file"
   log_info "  - $allure_report_dir/index.html"
+  log_info "  - http://127.0.0.1:${ALLURE_SERVER_PORT}/index.html"
 }
 
 # Destrui infraestrutura

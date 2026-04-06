@@ -3,7 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const port = Number(process.env.SEFAZ_MOCK_PORT || 18080);
-const matrixPath = process.env.UF_MATRIX_PATH || path.join(__dirname, '..', 'tests', 'data', 'ufs.v2026-04-01.json');
+const matrixPath = process.env.UF_MATRIX_PATH || path.join(__dirname, '..', 'tests', 'data', 'ufs.json');
 const ufMatrix = JSON.parse(fs.readFileSync(matrixPath, 'utf8'));
 
 function extractTag(xml, tag) {

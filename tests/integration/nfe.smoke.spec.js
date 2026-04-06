@@ -1,6 +1,6 @@
 const { test, expect } = require('@playwright/test');
 const { buildNfeXml } = require('../utils/xml');
-const ufMatrix = require('../data/ufs.v2026-04-01.json');
+const ufMatrix = require('../data/ufs.json');
 
 function parseFilterList(value) {
   if (!value) {
