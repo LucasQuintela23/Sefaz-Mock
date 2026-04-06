@@ -2,7 +2,6 @@
 set -euo pipefail
 
 # Script de bootstrap completo: clusters Kind + Terraform + WireMock + Playwright
-# Uso: bash scripts/bootstrap-k8s-local.sh [up|down|test|logs]
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CLUSTER_NAME="${CLUSTER_NAME:-sefaz-mock}"
@@ -157,13 +156,10 @@ destroy_infrastructure() {
     -var="namespace=${NAMESPACE}" \
     -var="mappings_dir=../../mocks/mappings"
   
-  # Delete cluster Kind (opcional, comentado por padrão)
-  # kind delete cluster --name "${CLUSTER_NAME}"
-  
   log_success "Infraestrutura destruída"
 }
 
-# Main
+# Main function
 main() {
   case "${ACTION}" in
     up)
@@ -189,21 +185,21 @@ main() {
       destroy_infrastructure
       ;;
     *)
-      cat <<-EOF
-        Uso: bash scripts/bootstrap-k8s-local.sh [comando]
+      cat << 'HELP'
+Uso: bash scripts/bootstrap-k8s-local.sh [comando]
 
-        Comandos:
-          up    - Cria cluster, provisiona infra e aguarda WireMock (padrão)
-          test  - Executa testes Playwright contra WireMock já subido
-          logs  - Exibe logs da stream do WireMock
-          down  - Destrui infraestrutura (keep cluster Kind)
+Comandos:
+  up    - Cria cluster, provisiona infra e aguarda WireMock (padrão)
+  test  - Executa testes Playwright contra WireMock já subido
+  logs  - Exibe logs da stream do WireMock
+  down  - Destrui infraestrutura (keep cluster Kind)
 
-        Exemplo ponta a ponta:
-          1. bash scripts/bootstrap-k8s-local.sh up
-          2. (em outro terminal) bash scripts/bootstrap-k8s-local.sh test
-          3. bash scripts/bootstrap-k8s-local.sh logs (opcional, em outro terminal)
-          4. bash scripts/bootstrap-k8s-local.sh down
-      EOF
+Exemplo ponta a ponta:
+  1. bash scripts/bootstrap-k8s-local.sh up
+  2. (em outro terminal) bash scripts/bootstrap-k8s-local.sh test
+  3. bash scripts/bootstrap-k8s-local.sh logs (opcional, em outro terminal)
+  4. bash scripts/bootstrap-k8s-local.sh down
+HELP
       exit 1
       ;;
   esac
