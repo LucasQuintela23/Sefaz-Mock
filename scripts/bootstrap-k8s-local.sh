@@ -79,10 +79,14 @@ generate_test_data() {
 
 # Inicializa e aplica Terraform
 apply_terraform() {
-  log_info "Inicializando Terraform..."
   cd "$ROOT_DIR/infra/terraform"
-  
-  terraform init
+
+  if [ "${FORCE_TERRAFORM_INIT:-false}" = "true" ] || [ ! -d ".terraform/providers" ]; then
+    log_info "Inicializando Terraform..."
+    terraform init
+  else
+    log_info "Terraform ja inicializado localmente. Pulando init. Use FORCE_TERRAFORM_INIT=true para forcar reinit."
+  fi
   
   log_info "Aplicando recursos Kubernetes..."
   terraform apply -auto-approve \

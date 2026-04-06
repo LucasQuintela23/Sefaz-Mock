@@ -64,41 +64,34 @@ A governanca foi implementada em pasta dedicada:
 
 ## Execucao rapida
 
-1. Instalar dependencias:
-	npm install
-2. Rodar smoke sem Docker (recomendado para ambiente local simples):
-	npm run test:smoke:local
-
-Fluxo opcional com WireMock via Docker:
-1. Subir WireMock:
-	npm run matrix:generate && npm run wiremock:mappings:generate
-	WIREMOCK_PORT=18080 docker compose up -d wiremock
-2. Rodar smoke:
-	WIREMOCK_PORT=18080 bash scripts/smoke-local.sh
-3. Derrubar ambiente:
-	docker compose down
-
-## Fluxo recomendado: Kubernetes local com Terraform (Sprint C)
+Fluxo principal recomendado: Kubernetes local com Terraform (Sprint C).
 
 Para ambiente reproduzivel com Kubernetes local (Kind) e provisionamento declarativo:
 
-1. Bootstrap completo em um comando:
+1. Instalar dependencias:
+	npm install
+2. Executar o fluxo completo em um comando:
+	bash scripts/bootstrap-k8s-local.sh all
+
+Esse fluxo automaticamente:
+- Cria/valida cluster Kind
+- Gera dados de teste
+- Provisiona namespace, configmap, deployment e service via Terraform
+- Aguarda WireMock estar ready
+- Inicia port-forward para 127.0.0.1:18080
+- Exibe logs do WireMock durante a execução
+- Executa todos os testes Playwright
+- Gera o relatório final no Allure Report
+- Abre o relatório no navegador
+
+Fluxo manual por etapas:
+1. Subir ambiente:
 	bash scripts/bootstrap-k8s-local.sh up
-
-   Isso automaticamente:
-   - Cria cluster Kind
-   - Gera dados de teste
-   - Provisiona namespace, configmap, deployment e service via Terraform
-   - Aguarda WireMock estar ready
-   - Inicia port-forward para 127.0.0.1:18080
-
-2. Rodar testes (em outro terminal):
+2. Rodar testes:
 	bash scripts/bootstrap-k8s-local.sh test
-
-3. Ver logs do WireMock:
+3. Ver logs:
 	bash scripts/bootstrap-k8s-local.sh logs
-
-4. Encerrar (cleanup de infra, mantém cluster):
+4. Encerrar:
 	bash scripts/bootstrap-k8s-local.sh down
 
 Alternativa via npm scripts:
@@ -106,6 +99,7 @@ Alternativa via npm scripts:
 	npm run test:k8s
 	npm run k8s:logs
 	npm run k8s:down
+	npm run k8s:all
 
 Para detalhes completos, ver [infra/README.md](infra/README.md).
 
@@ -126,10 +120,3 @@ Geracao automatica da matriz (sem manutencao manual):
 	npm run matrix:generate
 2. Arquivo gerado:
 	tests/data/ufs.json
-
-Particionamento por lote (CI/local):
-1. Definir lote de UFs via variavel:
-	TEST_UFS=SP,RJ,MG npm run test:smoke:local
-2. (Opcional) filtrar por regime:
-	TEST_UFS=SP,RJ TEST_REGIMES=SIMPLES_NACIONAL npm run test:smoke:local
-3. No GitHub Actions, os lotes sao executados em paralelo via matriz no workflow smoke.

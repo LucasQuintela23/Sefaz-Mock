@@ -10,7 +10,6 @@
     "test": "playwright test",
     "test:headed": "playwright test --headed",
     "test:smoke": "playwright test tests/integration/nfe.smoke.spec.js",
-    "test:smoke:local": "bash scripts/smoke-local-node.sh",
     "test:k8s": "bash scripts/bootstrap-k8s-local.sh test",
     "k8s:up": "bash scripts/bootstrap-k8s-local.sh up",
     "k8s:down": "bash scripts/bootstrap-k8s-local.sh down",
