@@ -168,4 +168,29 @@ test.describe('NF-e piloto IBS/CBS', () => {
       }
     );
   }
+
+  for (let index = 0; index < 5; index += 1) {
+    test('deve falhar propositalmente para visualizacao no grafico #' + (index + 1), async ({ request, baseURL }, testInfo) => {
+      const rule = filteredRules[index % filteredRules.length];
+      const xml = buildNfeXml({
+        uf: rule.uf,
+        cfop: rule.cfop,
+        dhEmi: rule.vigenciaInicio,
+        regimeTributario: rule.regimeTributario,
+        vIBS: '999.99',
+        vCBS: rule.vCBS
+      });
+
+      const response = await request.post(baseURL + '/sefaz/autorizar', {
+        data: xml,
+        headers: { 'content-type': 'application/xml' }
+      });
+
+      const body = await response.text();
+      await attachExecutionEvidence(testInfo, 'FALHA_PROPOSITAL_GRAFICO', rule, xml, response.status(), body);
+
+      // Falha intencional para gerar ponto de erro no dashboard.
+      expect(response.status()).toBe(200);
+    });
+  }
 });

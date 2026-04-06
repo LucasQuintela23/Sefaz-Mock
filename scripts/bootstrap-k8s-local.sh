@@ -768,7 +768,8 @@ EOF
         index: index,
         duration: item.time.duration || 0,
         name: item.name,
-        uid: item.uid || ''
+        uid: item.uid || '',
+        status: item.status || 'unknown'
       };
     });
 
@@ -786,16 +787,25 @@ EOF
     );
     svg.appendChild(polyline);
 
+    var step = Math.max(1, Math.ceil(points.length / 18));
+
     points.forEach(function (point, index) {
-      if (index % Math.ceil(points.length / 18) !== 0 && index !== points.length - 1) {
+      var sampledPoint = index % step === 0 || index === points.length - 1;
+      var failedPoint = point.status === 'failed' || point.status === 'broken';
+
+      if (!sampledPoint && !failedPoint) {
         return;
       }
 
       var dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
       dot.setAttribute('cx', point.x.toFixed(1));
       dot.setAttribute('cy', point.y.toFixed(1));
-      dot.setAttribute('r', '2.8');
-      dot.setAttribute('fill', '#7ecb5a');
+      dot.setAttribute('r', failedPoint ? '3.6' : '2.8');
+      dot.setAttribute('fill', failedPoint ? '#d62828' : '#7ecb5a');
+      if (failedPoint) {
+        dot.setAttribute('stroke', '#8f1d1d');
+        dot.setAttribute('stroke-width', '1');
+      }
       svg.appendChild(dot);
     });
 
@@ -1126,10 +1136,20 @@ run_all() {
   }
   trap cleanup_all EXIT
 
-  run_tests
+  local test_exit_code=0
+  run_tests || test_exit_code=$?
+  if [ "$test_exit_code" -ne 0 ]; then
+    log_info "Testes finalizaram com falhas (exit=${test_exit_code}). Gerando Allure mesmo assim para analise."
+  fi
+
   generate_allure_report "$allure_results_dir" "$allure_report_dir"
   cleanup_all
   trap - EXIT
+
+  if [ "$test_exit_code" -ne 0 ]; then
+    log_error "Fluxo all concluido com falhas de teste. Consulte o relatório Allure para detalhes."
+    return "$test_exit_code"
+  fi
 
   log_success "Fluxo all concluido (ambiente mantido ativo)."
   log_info "Use 'bash scripts/bootstrap-k8s-local.sh down' para destruir a infraestrutura."
