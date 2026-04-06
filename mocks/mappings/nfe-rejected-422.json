@@ -1,6 +1,6 @@
 {
   "name": "nfe-rejected-422",
-  "priority": 10,
+  "priority": 5,
   "request": {
     "method": "POST",
     "urlPath": "/sefaz/autorizar",
@@ -13,6 +13,6 @@
     "headers": {
       "Content-Type": "application/xml"
     },
-    "body": "<retEnviNFe><cStat>422</cStat><xMotivo>REJEICAO_IBUT_422</xMotivo></retEnviNFe>"
+    "body": "<retEnviNFe><cStat>422</cStat><xMotivo>REJEICAO_IBUT_422</xMotivo><uf>AC</uf><uf>AL</uf><uf>AP</uf><uf>AM</uf><uf>BA</uf><uf>CE</uf><uf>DF</uf><uf>ES</uf><uf>GO</uf><uf>MA</uf><uf>MT</uf><uf>MS</uf><uf>MG</uf><uf>PA</uf><uf>PB</uf><uf>PR</uf><uf>PE</uf><uf>PI</uf><uf>RJ</uf><uf>RN</uf><uf>RS</uf><uf>RO</uf><uf>RR</uf><uf>SC</uf><uf>SP</uf><uf>SE</uf><uf>TO</uf><cfop>6101</cfop><cfop>6102</cfop><cfop>6108</cfop><regimeTributario>SIMPLES_NACIONAL</regimeTributario><regimeTributario>LUCRO_REAL</regimeTributario></retEnviNFe>"
   }
 }

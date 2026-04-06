@@ -1,6 +1,6 @@
-const http = require('http');
-const fs = require('fs');
-const path = require('path');
+const http = require('node:http');
+const fs = require('node:fs');
+const path = require('node:path');
 
 const port = Number(process.env.SEFAZ_MOCK_PORT || 18080);
 const matrixPath = process.env.UF_MATRIX_PATH || path.join(__dirname, '..', 'tests', 'data', 'ufs.v2026-04-01.json');
@@ -11,8 +11,21 @@ function extractTag(xml, tag) {
   return match ? match[1] : null;
 }
 
-function findRuleByUf(uf) {
-  return ufMatrix.rules.find((rule) => rule.uf === uf);
+function isDateInRange(date, start, end) {
+  if (!date || !start || !end) {
+    return false;
+  }
+  return date >= start && date <= end;
+}
+
+function findRule(uf, cfop, regimeTributario, dhEmi) {
+  return ufMatrix.rules.find(
+    (rule) =>
+      rule.uf === uf &&
+      rule.cfop === cfop &&
+      rule.regimeTributario === regimeTributario &&
+      isDateInRange(dhEmi, rule.vigenciaInicio, rule.vigenciaFim)
+  );
 }
 
 const server = http.createServer((req, res) => {
@@ -35,11 +48,14 @@ const server = http.createServer((req, res) => {
 
   req.on('end', () => {
     const uf = extractTag(body, 'UF');
+    const cfop = extractTag(body, 'CFOP');
+    const regimeTributario = extractTag(body, 'regimeTributario');
+    const dhEmi = extractTag(body, 'dhEmi');
     const vIBS = extractTag(body, 'vIBS');
     const vCBS = extractTag(body, 'vCBS');
-    const rule = findRuleByUf(uf);
+    const rule = findRule(uf, cfop, regimeTributario, dhEmi);
 
-    if (!uf || !vIBS || !vCBS) {
+    if (!uf || !cfop || !regimeTributario || !dhEmi || !vIBS || !vCBS) {
       res.writeHead(422, { 'content-type': 'application/xml' });
       res.end('<retEnviNFe><cStat>422</cStat><xMotivo>REJEICAO_XML_INVALIDO</xMotivo></retEnviNFe>');
       return;
@@ -47,7 +63,17 @@ const server = http.createServer((req, res) => {
 
     if (!rule) {
       res.writeHead(422, { 'content-type': 'application/xml' });
-      res.end('<retEnviNFe><cStat>422</cStat><xMotivo>REJEICAO_UF_NAO_MAPEADA</xMotivo><uf>' + uf + '</uf></retEnviNFe>');
+      res.end(
+        '<retEnviNFe><cStat>422</cStat><xMotivo>REJEICAO_REGRA_NAO_ENCONTRADA</xMotivo><uf>' +
+          uf +
+          '</uf><cfop>' +
+          cfop +
+          '</cfop><regimeTributario>' +
+          regimeTributario +
+          '</regimeTributario><dhEmi>' +
+          dhEmi +
+          '</dhEmi></retEnviNFe>'
+      );
       return;
     }
 
@@ -56,7 +82,11 @@ const server = http.createServer((req, res) => {
       res.end(
         '<retEnviNFe><cStat>422</cStat><xMotivo>REJEICAO_IBUT_422</xMotivo><uf>' +
           uf +
-          '</uf><esperadoIBS>' +
+          '</uf><cfop>' +
+          cfop +
+          '</cfop><regimeTributario>' +
+          regimeTributario +
+          '</regimeTributario><esperadoIBS>' +
           rule.vIBS +
           '</esperadoIBS><informadoIBS>' +
           vIBS +

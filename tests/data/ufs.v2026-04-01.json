@@ -1,15 +1,494 @@
 {
   "version": "2026-04-01",
+  "generatedAt": "2026-04-01T00:00:00.000Z",
+  "totalUFs": 27,
+  "totalRules": 54,
   "rules": [
     {
-      "uf": "SP",
-      "vIBS": "10.00",
-      "vCBS": "5.00"
+      "uf": "AC",
+      "cfop": "6101",
+      "regimeTributario": "SIMPLES_NACIONAL",
+      "vigenciaInicio": "2026-04-01",
+      "vigenciaFim": "2026-12-31",
+      "vIBS": "9.50",
+      "vCBS": "4.50"
+    },
+    {
+      "uf": "AC",
+      "cfop": "6101",
+      "regimeTributario": "LUCRO_REAL",
+      "vigenciaInicio": "2026-04-01",
+      "vigenciaFim": "2026-12-31",
+      "vIBS": "10.25",
+      "vCBS": "4.75"
+    },
+    {
+      "uf": "AL",
+      "cfop": "6102",
+      "regimeTributario": "SIMPLES_NACIONAL",
+      "vigenciaInicio": "2026-04-01",
+      "vigenciaFim": "2026-12-31",
+      "vIBS": "9.90",
+      "vCBS": "4.70"
+    },
+    {
+      "uf": "AL",
+      "cfop": "6102",
+      "regimeTributario": "LUCRO_REAL",
+      "vigenciaInicio": "2026-04-01",
+      "vigenciaFim": "2026-12-31",
+      "vIBS": "10.65",
+      "vCBS": "4.95"
+    },
+    {
+      "uf": "AP",
+      "cfop": "6108",
+      "regimeTributario": "SIMPLES_NACIONAL",
+      "vigenciaInicio": "2026-04-01",
+      "vigenciaFim": "2026-12-31",
+      "vIBS": "10.30",
+      "vCBS": "4.90"
+    },
+    {
+      "uf": "AP",
+      "cfop": "6108",
+      "regimeTributario": "LUCRO_REAL",
+      "vigenciaInicio": "2026-04-01",
+      "vigenciaFim": "2026-12-31",
+      "vIBS": "11.05",
+      "vCBS": "5.15"
+    },
+    {
+      "uf": "AM",
+      "cfop": "6101",
+      "regimeTributario": "SIMPLES_NACIONAL",
+      "vigenciaInicio": "2026-04-01",
+      "vigenciaFim": "2026-12-31",
+      "vIBS": "10.70",
+      "vCBS": "5.10"
+    },
+    {
+      "uf": "AM",
+      "cfop": "6101",
+      "regimeTributario": "LUCRO_REAL",
+      "vigenciaInicio": "2026-04-01",
+      "vigenciaFim": "2026-12-31",
+      "vIBS": "11.45",
+      "vCBS": "5.35"
+    },
+    {
+      "uf": "BA",
+      "cfop": "6102",
+      "regimeTributario": "SIMPLES_NACIONAL",
+      "vigenciaInicio": "2026-04-01",
+      "vigenciaFim": "2026-12-31",
+      "vIBS": "11.10",
+      "vCBS": "5.30"
+    },
+    {
+      "uf": "BA",
+      "cfop": "6102",
+      "regimeTributario": "LUCRO_REAL",
+      "vigenciaInicio": "2026-04-01",
+      "vigenciaFim": "2026-12-31",
+      "vIBS": "11.85",
+      "vCBS": "5.55"
+    },
+    {
+      "uf": "CE",
+      "cfop": "6108",
+      "regimeTributario": "SIMPLES_NACIONAL",
+      "vigenciaInicio": "2026-04-01",
+      "vigenciaFim": "2026-12-31",
+      "vIBS": "11.50",
+      "vCBS": "4.50"
+    },
+    {
+      "uf": "CE",
+      "cfop": "6108",
+      "regimeTributario": "LUCRO_REAL",
+      "vigenciaInicio": "2026-04-01",
+      "vigenciaFim": "2026-12-31",
+      "vIBS": "12.25",
+      "vCBS": "4.75"
+    },
+    {
+      "uf": "DF",
+      "cfop": "6101",
+      "regimeTributario": "SIMPLES_NACIONAL",
+      "vigenciaInicio": "2026-04-01",
+      "vigenciaFim": "2026-12-31",
+      "vIBS": "11.90",
+      "vCBS": "4.70"
+    },
+    {
+      "uf": "DF",
+      "cfop": "6101",
+      "regimeTributario": "LUCRO_REAL",
+      "vigenciaInicio": "2026-04-01",
+      "vigenciaFim": "2026-12-31",
+      "vIBS": "12.65",
+      "vCBS": "4.95"
+    },
+    {
+      "uf": "ES",
+      "cfop": "6102",
+      "regimeTributario": "SIMPLES_NACIONAL",
+      "vigenciaInicio": "2026-04-01",
+      "vigenciaFim": "2026-12-31",
+      "vIBS": "9.50",
+      "vCBS": "4.90"
+    },
+    {
+      "uf": "ES",
+      "cfop": "6102",
+      "regimeTributario": "LUCRO_REAL",
+      "vigenciaInicio": "2026-04-01",
+      "vigenciaFim": "2026-12-31",
+      "vIBS": "10.25",
+      "vCBS": "5.15"
+    },
+    {
+      "uf": "GO",
+      "cfop": "6108",
+      "regimeTributario": "SIMPLES_NACIONAL",
+      "vigenciaInicio": "2026-04-01",
+      "vigenciaFim": "2026-12-31",
+      "vIBS": "9.90",
+      "vCBS": "5.10"
+    },
+    {
+      "uf": "GO",
+      "cfop": "6108",
+      "regimeTributario": "LUCRO_REAL",
+      "vigenciaInicio": "2026-04-01",
+      "vigenciaFim": "2026-12-31",
+      "vIBS": "10.65",
+      "vCBS": "5.35"
+    },
+    {
+      "uf": "MA",
+      "cfop": "6101",
+      "regimeTributario": "SIMPLES_NACIONAL",
+      "vigenciaInicio": "2026-04-01",
+      "vigenciaFim": "2026-12-31",
+      "vIBS": "10.30",
+      "vCBS": "5.30"
+    },
+    {
+      "uf": "MA",
+      "cfop": "6101",
+      "regimeTributario": "LUCRO_REAL",
+      "vigenciaInicio": "2026-04-01",
+      "vigenciaFim": "2026-12-31",
+      "vIBS": "11.05",
+      "vCBS": "5.55"
+    },
+    {
+      "uf": "MT",
+      "cfop": "6102",
+      "regimeTributario": "SIMPLES_NACIONAL",
+      "vigenciaInicio": "2026-04-01",
+      "vigenciaFim": "2026-12-31",
+      "vIBS": "10.70",
+      "vCBS": "4.50"
+    },
+    {
+      "uf": "MT",
+      "cfop": "6102",
+      "regimeTributario": "LUCRO_REAL",
+      "vigenciaInicio": "2026-04-01",
+      "vigenciaFim": "2026-12-31",
+      "vIBS": "11.45",
+      "vCBS": "4.75"
+    },
+    {
+      "uf": "MS",
+      "cfop": "6108",
+      "regimeTributario": "SIMPLES_NACIONAL",
+      "vigenciaInicio": "2026-04-01",
+      "vigenciaFim": "2026-12-31",
+      "vIBS": "11.10",
+      "vCBS": "4.70"
+    },
+    {
+      "uf": "MS",
+      "cfop": "6108",
+      "regimeTributario": "LUCRO_REAL",
+      "vigenciaInicio": "2026-04-01",
+      "vigenciaFim": "2026-12-31",
+      "vIBS": "11.85",
+      "vCBS": "4.95"
+    },
+    {
+      "uf": "MG",
+      "cfop": "6101",
+      "regimeTributario": "SIMPLES_NACIONAL",
+      "vigenciaInicio": "2026-04-01",
+      "vigenciaFim": "2026-12-31",
+      "vIBS": "11.50",
+      "vCBS": "4.90"
+    },
+    {
+      "uf": "MG",
+      "cfop": "6101",
+      "regimeTributario": "LUCRO_REAL",
+      "vigenciaInicio": "2026-04-01",
+      "vigenciaFim": "2026-12-31",
+      "vIBS": "12.25",
+      "vCBS": "5.15"
+    },
+    {
+      "uf": "PA",
+      "cfop": "6102",
+      "regimeTributario": "SIMPLES_NACIONAL",
+      "vigenciaInicio": "2026-04-01",
+      "vigenciaFim": "2026-12-31",
+      "vIBS": "11.90",
+      "vCBS": "5.10"
+    },
+    {
+      "uf": "PA",
+      "cfop": "6102",
+      "regimeTributario": "LUCRO_REAL",
+      "vigenciaInicio": "2026-04-01",
+      "vigenciaFim": "2026-12-31",
+      "vIBS": "12.65",
+      "vCBS": "5.35"
+    },
+    {
+      "uf": "PB",
+      "cfop": "6108",
+      "regimeTributario": "SIMPLES_NACIONAL",
+      "vigenciaInicio": "2026-04-01",
+      "vigenciaFim": "2026-12-31",
+      "vIBS": "9.50",
+      "vCBS": "5.30"
+    },
+    {
+      "uf": "PB",
+      "cfop": "6108",
+      "regimeTributario": "LUCRO_REAL",
+      "vigenciaInicio": "2026-04-01",
+      "vigenciaFim": "2026-12-31",
+      "vIBS": "10.25",
+      "vCBS": "5.55"
+    },
+    {
+      "uf": "PR",
+      "cfop": "6101",
+      "regimeTributario": "SIMPLES_NACIONAL",
+      "vigenciaInicio": "2026-04-01",
+      "vigenciaFim": "2026-12-31",
+      "vIBS": "9.90",
+      "vCBS": "4.50"
+    },
+    {
+      "uf": "PR",
+      "cfop": "6101",
+      "regimeTributario": "LUCRO_REAL",
+      "vigenciaInicio": "2026-04-01",
+      "vigenciaFim": "2026-12-31",
+      "vIBS": "10.65",
+      "vCBS": "4.75"
+    },
+    {
+      "uf": "PE",
+      "cfop": "6102",
+      "regimeTributario": "SIMPLES_NACIONAL",
+      "vigenciaInicio": "2026-04-01",
+      "vigenciaFim": "2026-12-31",
+      "vIBS": "10.30",
+      "vCBS": "4.70"
+    },
+    {
+      "uf": "PE",
+      "cfop": "6102",
+      "regimeTributario": "LUCRO_REAL",
+      "vigenciaInicio": "2026-04-01",
+      "vigenciaFim": "2026-12-31",
+      "vIBS": "11.05",
+      "vCBS": "4.95"
+    },
+    {
+      "uf": "PI",
+      "cfop": "6108",
+      "regimeTributario": "SIMPLES_NACIONAL",
+      "vigenciaInicio": "2026-04-01",
+      "vigenciaFim": "2026-12-31",
+      "vIBS": "10.70",
+      "vCBS": "4.90"
+    },
+    {
+      "uf": "PI",
+      "cfop": "6108",
+      "regimeTributario": "LUCRO_REAL",
+      "vigenciaInicio": "2026-04-01",
+      "vigenciaFim": "2026-12-31",
+      "vIBS": "11.45",
+      "vCBS": "5.15"
     },
     {
       "uf": "RJ",
+      "cfop": "6101",
+      "regimeTributario": "SIMPLES_NACIONAL",
+      "vigenciaInicio": "2026-04-01",
+      "vigenciaFim": "2026-12-31",
+      "vIBS": "11.10",
+      "vCBS": "5.10"
+    },
+    {
+      "uf": "RJ",
+      "cfop": "6101",
+      "regimeTributario": "LUCRO_REAL",
+      "vigenciaInicio": "2026-04-01",
+      "vigenciaFim": "2026-12-31",
+      "vIBS": "11.85",
+      "vCBS": "5.35"
+    },
+    {
+      "uf": "RN",
+      "cfop": "6102",
+      "regimeTributario": "SIMPLES_NACIONAL",
+      "vigenciaInicio": "2026-04-01",
+      "vigenciaFim": "2026-12-31",
       "vIBS": "11.50",
-      "vCBS": "5.00"
+      "vCBS": "5.30"
+    },
+    {
+      "uf": "RN",
+      "cfop": "6102",
+      "regimeTributario": "LUCRO_REAL",
+      "vigenciaInicio": "2026-04-01",
+      "vigenciaFim": "2026-12-31",
+      "vIBS": "12.25",
+      "vCBS": "5.55"
+    },
+    {
+      "uf": "RS",
+      "cfop": "6108",
+      "regimeTributario": "SIMPLES_NACIONAL",
+      "vigenciaInicio": "2026-04-01",
+      "vigenciaFim": "2026-12-31",
+      "vIBS": "11.90",
+      "vCBS": "4.50"
+    },
+    {
+      "uf": "RS",
+      "cfop": "6108",
+      "regimeTributario": "LUCRO_REAL",
+      "vigenciaInicio": "2026-04-01",
+      "vigenciaFim": "2026-12-31",
+      "vIBS": "12.65",
+      "vCBS": "4.75"
+    },
+    {
+      "uf": "RO",
+      "cfop": "6101",
+      "regimeTributario": "SIMPLES_NACIONAL",
+      "vigenciaInicio": "2026-04-01",
+      "vigenciaFim": "2026-12-31",
+      "vIBS": "9.50",
+      "vCBS": "4.70"
+    },
+    {
+      "uf": "RO",
+      "cfop": "6101",
+      "regimeTributario": "LUCRO_REAL",
+      "vigenciaInicio": "2026-04-01",
+      "vigenciaFim": "2026-12-31",
+      "vIBS": "10.25",
+      "vCBS": "4.95"
+    },
+    {
+      "uf": "RR",
+      "cfop": "6102",
+      "regimeTributario": "SIMPLES_NACIONAL",
+      "vigenciaInicio": "2026-04-01",
+      "vigenciaFim": "2026-12-31",
+      "vIBS": "9.90",
+      "vCBS": "4.90"
+    },
+    {
+      "uf": "RR",
+      "cfop": "6102",
+      "regimeTributario": "LUCRO_REAL",
+      "vigenciaInicio": "2026-04-01",
+      "vigenciaFim": "2026-12-31",
+      "vIBS": "10.65",
+      "vCBS": "5.15"
+    },
+    {
+      "uf": "SC",
+      "cfop": "6108",
+      "regimeTributario": "SIMPLES_NACIONAL",
+      "vigenciaInicio": "2026-04-01",
+      "vigenciaFim": "2026-12-31",
+      "vIBS": "10.30",
+      "vCBS": "5.10"
+    },
+    {
+      "uf": "SC",
+      "cfop": "6108",
+      "regimeTributario": "LUCRO_REAL",
+      "vigenciaInicio": "2026-04-01",
+      "vigenciaFim": "2026-12-31",
+      "vIBS": "11.05",
+      "vCBS": "5.35"
+    },
+    {
+      "uf": "SP",
+      "cfop": "6101",
+      "regimeTributario": "SIMPLES_NACIONAL",
+      "vigenciaInicio": "2026-04-01",
+      "vigenciaFim": "2026-12-31",
+      "vIBS": "10.70",
+      "vCBS": "5.30"
+    },
+    {
+      "uf": "SP",
+      "cfop": "6101",
+      "regimeTributario": "LUCRO_REAL",
+      "vigenciaInicio": "2026-04-01",
+      "vigenciaFim": "2026-12-31",
+      "vIBS": "11.45",
+      "vCBS": "5.55"
+    },
+    {
+      "uf": "SE",
+      "cfop": "6102",
+      "regimeTributario": "SIMPLES_NACIONAL",
+      "vigenciaInicio": "2026-04-01",
+      "vigenciaFim": "2026-12-31",
+      "vIBS": "11.10",
+      "vCBS": "4.50"
+    },
+    {
+      "uf": "SE",
+      "cfop": "6102",
+      "regimeTributario": "LUCRO_REAL",
+      "vigenciaInicio": "2026-04-01",
+      "vigenciaFim": "2026-12-31",
+      "vIBS": "11.85",
+      "vCBS": "4.75"
+    },
+    {
+      "uf": "TO",
+      "cfop": "6108",
+      "regimeTributario": "SIMPLES_NACIONAL",
+      "vigenciaInicio": "2026-04-01",
+      "vigenciaFim": "2026-12-31",
+      "vIBS": "11.50",
+      "vCBS": "4.70"
+    },
+    {
+      "uf": "TO",
+      "cfop": "6108",
+      "regimeTributario": "LUCRO_REAL",
+      "vigenciaInicio": "2026-04-01",
+      "vigenciaFim": "2026-12-31",
+      "vIBS": "12.25",
+      "vCBS": "4.95"
     }
   ]
 }
